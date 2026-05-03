@@ -1,7 +1,7 @@
-//! The views module contains the components for all Layouts and Routes for our app.
+pub mod browse;
+pub mod detail;
+pub mod navbar;
 
-mod home;
-pub use home::Home;
-
-mod navbar;
+pub use browse::Browse;
+pub use detail::Detail;
 pub use navbar::Navbar;
