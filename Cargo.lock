@@ -4554,6 +4554,15 @@ dependencies = [
 [[package]]
 name = "rf-index"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "rf-core",
+ "serde",
+ "serde_json",
+ "toml",
+]
 
 [[package]]
 name = "rfd"

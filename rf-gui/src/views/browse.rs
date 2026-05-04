@@ -17,6 +17,7 @@ fn mock_rices() -> Vec<Rice> {
             screenshots: vec![],
             stars: 342,
             commit_hash: None,
+            updated_at: None,
         },
         Rice {
             id: "nord-sway".into(),
@@ -31,6 +32,7 @@ fn mock_rices() -> Vec<Rice> {
             screenshots: vec![],
             stars: 187,
             commit_hash: None,
+            updated_at: None,
         },
         Rice {
             id: "gruvbox-i3".into(),
@@ -45,6 +47,7 @@ fn mock_rices() -> Vec<Rice> {
             screenshots: vec![],
             stars: 521,
             commit_hash: None,
+            updated_at: None,
         },
         Rice {
             id: "tokyo-night-hyprland".into(),
@@ -59,6 +62,7 @@ fn mock_rices() -> Vec<Rice> {
             screenshots: vec![],
             stars: 203,
             commit_hash: None,
+            updated_at: None,
         },
         Rice {
             id: "dracula-bspwm".into(),
@@ -73,6 +77,7 @@ fn mock_rices() -> Vec<Rice> {
             screenshots: vec![],
             stars: 98,
             commit_hash: None,
+            updated_at: None,
         },
         Rice {
             id: "rosepine-hyprland".into(),
@@ -87,25 +92,57 @@ fn mock_rices() -> Vec<Rice> {
             screenshots: vec![],
             stars: 156,
             commit_hash: None,
+            updated_at: None,
         },
     ]
+}
+
+fn load_rices() -> Vec<Rice> {
+    rf_core::index::IndexManager::load_cached()
+        .map(|idx| idx.rices)
+        .unwrap_or_else(|_| mock_rices())
 }
 
 #[component]
 pub fn Browse() -> Element {
     let mut search = use_signal(|| String::new());
+    let mut wm_filter: Signal<Option<String>> = use_signal(|| None);
+
+    let all_rices = use_resource(move || async { load_rices() });
+
     let filtered = use_memo(move || {
+        let rices = all_rices.read();
+        let rices = rices.as_deref().unwrap_or(&[]);
         let q = search().to_lowercase();
-        mock_rices()
-            .into_iter()
+        let wm = wm_filter();
+
+        rices
+            .iter()
             .filter(|r| {
-                q.is_empty()
+                let matches_q = q.is_empty()
                     || r.name.to_lowercase().contains(&q)
                     || r.author.to_lowercase().contains(&q)
                     || r.theme.to_lowercase().contains(&q)
+                    || r.id.to_lowercase().contains(&q);
+
+                let matches_wm = wm
+                    .as_deref()
+                    .map_or(true, |w| r.wm.to_string().to_lowercase() == w);
+
+                matches_q && matches_wm
             })
+            .cloned()
             .collect::<Vec<_>>()
     });
+
+    let wm_options = [
+        ("All", None),
+        ("Hyprland", Some("hyprland")),
+        ("Sway", Some("sway")),
+        ("i3", Some("i3")),
+        ("bspwm", Some("bspwm")),
+        ("Qtile", Some("qtile")),
+    ];
 
     let rices = filtered();
 
@@ -121,10 +158,19 @@ pub fn Browse() -> Element {
                     oninput: move |e| *search.write() = e.value(),
                 }
             }
+            div { class: "wm-filters",
+                for (label, value) in wm_options {
+                    button {
+                        class: if wm_filter().as_deref() == value { "wm-chip wm-chip--active" } else { "wm-chip" },
+                        onclick: move |_| *wm_filter.write() = value.map(str::to_string),
+                        "{label}"
+                    }
+                }
+            }
             if rices.is_empty() {
                 div { class: "empty-state",
                     h3 { "No rices found" }
-                    p { "Try a different search query." }
+                    p { "Try a different search or filter." }
                 }
             } else {
                 div { class: "rice-grid",

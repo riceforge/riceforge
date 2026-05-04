@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Linux binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binaries
+        run: |
+          cargo build --release -p riceforge
+          cargo build --release -p rf-index
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/riceforge dist/
+          cp target/release/rf-index dist/
+          tar -czf dist/riceforge-${{ github.ref_name }}-linux-x86_64.tar.gz -C dist riceforge rf-index
+
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/riceforge-*.tar.gz
