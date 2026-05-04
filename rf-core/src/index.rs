@@ -1,0 +1,75 @@
+use std::{fs, process::Command};
+use crate::{
+    config::Paths,
+    error::{Result, RiceForgeError},
+    models::{Index, Rice, WindowManager},
+};
+
+pub const INDEX_URL: &str =
+    "https://raw.githubusercontent.com/riceforge/riceforge-index/main/index.json";
+
+pub struct IndexManager;
+
+impl IndexManager {
+    pub fn update() -> Result<Index> {
+        let output = Command::new("curl")
+            .args(["-sf", "--connect-timeout", "15", INDEX_URL])
+            .output()
+            .map_err(|e| RiceForgeError::Http(format!("curl not found: {e}")))?;
+
+        if !output.status.success() {
+            return Err(RiceForgeError::Http(format!(
+                "curl failed ({}). Check your internet connection.",
+                output.status
+            )));
+        }
+
+        let index: Index = serde_json::from_slice(&output.stdout)?;
+        Paths::ensure_dirs()?;
+        fs::write(Paths::index_cache(), serde_json::to_string_pretty(&index)?)?;
+        Ok(index)
+    }
+
+    pub fn load_cached() -> Result<Index> {
+        let path = Paths::index_cache();
+        if !path.exists() {
+            return Err(RiceForgeError::NotFound(
+                "no cached index — run 'riceforge update' first".into(),
+            ));
+        }
+        let data = fs::read_to_string(path)?;
+        Ok(serde_json::from_str(&data)?)
+    }
+
+    pub fn find(index: &Index, id: &str) -> Option<Rice> {
+        index.rices.iter().find(|r| r.id == id).cloned()
+    }
+
+    pub fn search<'a>(
+        index: &'a Index,
+        query: &str,
+        wm: Option<&WindowManager>,
+        theme: Option<&str>,
+    ) -> Vec<&'a Rice> {
+        let q = query.to_lowercase();
+        index
+            .rices
+            .iter()
+            .filter(|r| {
+                let matches_query = q.is_empty()
+                    || r.id.to_lowercase().contains(&q)
+                    || r.name.to_lowercase().contains(&q)
+                    || r.author.to_lowercase().contains(&q)
+                    || r.description.to_lowercase().contains(&q)
+                    || r.theme.to_lowercase().contains(&q);
+
+                let matches_wm = wm.map_or(true, |w| &r.wm == w);
+                let matches_theme = theme.map_or(true, |t| {
+                    r.theme.to_lowercase().contains(&t.to_lowercase())
+                });
+
+                matches_query && matches_wm && matches_theme
+            })
+            .collect()
+    }
+}
