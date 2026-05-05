@@ -105,10 +105,10 @@ fn load_rices() -> Vec<Rice> {
 
 #[component]
 pub fn Browse() -> Element {
-    let mut search = use_signal(|| String::new());
+    let mut search = use_signal(String::new);
     let mut wm_filter: Signal<Option<String>> = use_signal(|| None);
 
-    let all_rices = use_memo(move || load_rices());
+    let all_rices = use_memo(load_rices);
 
     let filtered = use_memo(move || {
         let q = search().to_lowercase();
@@ -125,7 +125,7 @@ pub fn Browse() -> Element {
 
                 let matches_wm = wm
                     .as_deref()
-                    .map_or(true, |w| r.wm.to_string().to_lowercase() == w);
+                    .is_none_or(|w| r.wm.to_string().to_lowercase() == w);
 
                 matches_q && matches_wm
             })

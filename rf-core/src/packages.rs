@@ -20,7 +20,7 @@ impl PackageManager {
             .unwrap_or(false)
     }
 
-    pub fn missing<'a>(packages: &'a [String]) -> Vec<&'a str> {
+    pub fn missing(packages: &[String]) -> Vec<&str> {
         packages
             .iter()
             .filter(|p| !Self::is_installed(p))
