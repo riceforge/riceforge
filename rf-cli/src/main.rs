@@ -8,6 +8,7 @@ use rf_core::{
     index::IndexManager,
     installed::InstalledManager,
     packages::PackageManager,
+    pipeline::{PipelineManager, PipelineWhen},
     WindowManager,
 };
 use std::str::FromStr;
@@ -276,6 +277,13 @@ fn cmd_install(id: &str, dry_run: bool, no_packages: bool) -> rf_core::Result<()
     DeployManager::apply(&plan)?;
     InstalledManager::add(id, &commit, backup_id)?;
 
+    if let Some(pipeline) = PipelineManager::load(id)? {
+        let pb = spinner("Running post-install pipeline...");
+        PipelineManager::run_steps(&pipeline, &PipelineWhen::Install, id)?;
+        pb.finish_and_clear();
+        println!("{} pipeline steps completed", "✓".green());
+    }
+
     println!("{} {} installed", "✓".green(), rice.name.bold());
     Ok(())
 }
@@ -286,6 +294,14 @@ fn cmd_remove(id: &str, restore: bool, purge: bool) -> rf_core::Result<()> {
         .ok_or_else(|| rf_core::RiceForgeError::NotFound(id.to_string()))?;
 
     let entry = InstalledManager::get(id)?;
+
+    if let Some(pipeline) = PipelineManager::load(id)? {
+        let pb = spinner("Running pre-remove pipeline...");
+        PipelineManager::run_steps(&pipeline, &PipelineWhen::Remove, id)?;
+        pb.finish_and_clear();
+        println!("{} pipeline steps completed", "✓".green());
+    }
+
     let removed = DeployManager::remove(&rice)?;
 
     println!("{} removed {} symlinks", "✓".green(), removed.len());

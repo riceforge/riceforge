@@ -28,6 +28,8 @@ pub enum RiceForgeError {
     Backup(String),
     #[error("deploy: {0}")]
     Deploy(String),
+    #[error("pipeline: {0}")]
+    Pipeline(String),
 }
 
 pub type Result<T> = std::result::Result<T, RiceForgeError>;
