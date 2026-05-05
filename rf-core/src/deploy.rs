@@ -1,4 +1,6 @@
-use std::{fs, path::PathBuf};
+#[cfg(unix)]
+use std::fs;
+use std::path::PathBuf;
 use walkdir::WalkDir;
 use crate::{
     config::Paths,
