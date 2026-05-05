@@ -20,7 +20,7 @@ impl PackageManager {
             .unwrap_or(false)
     }
 
-    pub fn missing(packages: &[String]) -> Vec<&str> {
+    pub fn missing<'a>(packages: &'a [String]) -> Vec<&'a str> {
         packages
             .iter()
             .filter(|p| !Self::is_installed(p))
@@ -37,7 +37,7 @@ impl PackageManager {
             .args(["pacman", "-S", "--needed", "--noconfirm"])
             .args(packages)
             .status()
-            .map_err(|e| RiceForgeError::PackageManager(format!("sudo/pacman not found: {e}")))?;
+            .map_err(|e| RiceForgeError::PackageManager(format!("sudo/pacman unavailable: {e}")))?;
 
         if !status.success() {
             return Err(RiceForgeError::PackageManager(format!(
