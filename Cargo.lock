@@ -4550,6 +4550,7 @@ version = "0.1.0"
 dependencies = [
  "dioxus",
  "rf-core",
+ "tokio",
 ]
 
 [[package]]
