@@ -1,0 +1,24 @@
+[[steps]]
+name = "Copy wallpapers"
+run = "cp -r ./wallpapers ~/Pictures/riceforge/"
+when = "install"
+
+[[steps]]
+name = "Enable waybar service"
+run = "systemctl --user enable --now waybar.service"
+when = "install"
+
+[[steps]]
+name = "Reload hyprland config"
+run = "hyprctl reload"
+when = "install"
+
+[[steps]]
+name = "Disable waybar service"
+run = "systemctl --user disable --now waybar.service"
+when = "remove"
+
+[[steps]]
+name = "Clean wallpapers"
+run = "rm -rf ~/Pictures/riceforge/"
+when = "remove"
