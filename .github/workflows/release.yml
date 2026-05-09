@@ -2,15 +2,14 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build Linux binaries
+  release:
+    name: Build Release
     runs-on: ubuntu-latest
 
     steps:
@@ -26,21 +25,27 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release binaries
-        run: |
-          cargo build --release -p riceforge
-          cargo build --release -p rf-index
+      - name: Build CLI
+        run: cargo build --release -p riceforge
+
+      - name: Build index tool
+        run: cargo build --release -p rf-index
 
       - name: Package
         run: |
+          TAG="${GITHUB_REF_NAME}"
           mkdir -p dist
-          cp target/release/riceforge dist/
-          cp target/release/rf-index dist/
-          tar -czf dist/riceforge-${{ github.ref_name }}-linux-x86_64.tar.gz -C dist riceforge rf-index
+          tar czf "dist/riceforge-${TAG}-linux-x86_64.tar.gz" \
+            -C target/release riceforge rf-index
+          sha256sum "dist/riceforge-${TAG}-linux-x86_64.tar.gz" \
+            > "dist/riceforge-${TAG}-linux-x86_64.tar.gz.sha256"
 
-      - name: Upload release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/riceforge-*.tar.gz
+          files: dist/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
