@@ -211,10 +211,7 @@ mod unix {
 
         let dest = &plan.links[0].1;
         assert!(dest.is_symlink());
-        assert_eq!(
-            fs::read_link(dest).unwrap(),
-            plan.links[0].0
-        );
+        assert_eq!(fs::read_link(dest).unwrap(), plan.links[0].0);
     }
 
     #[test]

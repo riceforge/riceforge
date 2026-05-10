@@ -1,10 +1,10 @@
-use std::fs;
-use chrono::Utc;
 use crate::{
     config::Paths,
     error::{Result, RiceForgeError},
     models::InstalledRice,
 };
+use chrono::Utc;
+use std::fs;
 
 pub struct InstalledManager;
 
@@ -20,7 +20,10 @@ impl InstalledManager {
 
     fn save(entries: &[InstalledRice]) -> Result<()> {
         Paths::ensure_dirs()?;
-        fs::write(Paths::installed_db(), serde_json::to_string_pretty(entries)?)?;
+        fs::write(
+            Paths::installed_db(),
+            serde_json::to_string_pretty(entries)?,
+        )?;
         Ok(())
     }
 

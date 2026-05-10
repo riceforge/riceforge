@@ -1,12 +1,12 @@
 use crate::Route;
 use dioxus::prelude::*;
 use rf_core::{
+    InstalledRice,
     deploy::DeployManager,
     git::GitManager,
     index::IndexManager,
     installed::InstalledManager,
     pipeline::{PipelineManager, PipelineWhen},
-    InstalledRice,
 };
 
 fn load_installed() -> Vec<InstalledRice> {
@@ -96,7 +96,11 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
     let rice_id_purge = entry.rice_id.clone();
 
     let display_name = find_rice_name(&rice_id).unwrap_or_else(|| rice_id.clone());
-    let short_hash = entry.commit_hash.get(..8).unwrap_or(&entry.commit_hash).to_string();
+    let short_hash = entry
+        .commit_hash
+        .get(..8)
+        .unwrap_or(&entry.commit_hash)
+        .to_string();
     let date = entry.installed_at.format("%Y-%m-%d").to_string();
 
     let mut op: Signal<RowOp> = use_signal(|| RowOp::Idle);

@@ -1,9 +1,9 @@
-use std::{fs, path::Path, process::Command};
 use crate::{
     config::Paths,
     error::{Result, RiceForgeError},
     models::Rice,
 };
+use std::{fs, path::Path, process::Command};
 
 pub struct GitManager;
 
@@ -39,7 +39,9 @@ impl GitManager {
             .map_err(|e| RiceForgeError::Git(format!("git not found: {e}")))?;
 
         if !status.success() {
-            return Err(RiceForgeError::Git("git pull failed — manual resolution needed".into()));
+            return Err(RiceForgeError::Git(
+                "git pull failed — manual resolution needed".into(),
+            ));
         }
 
         Self::head_hash(dir)

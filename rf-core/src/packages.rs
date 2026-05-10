@@ -1,5 +1,5 @@
-use std::process::Command;
 use crate::error::{Result, RiceForgeError};
+use std::process::Command;
 
 pub struct PackageManager;
 
