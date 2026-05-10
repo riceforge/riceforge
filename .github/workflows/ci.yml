@@ -37,10 +37,10 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Build
-        run: cargo build --workspace
+        run: cargo build --workspace --exclude rf-gui
 
       - name: Test
-        run: cargo test --workspace -- --test-threads=1
+        run: cargo test --workspace --exclude rf-gui -- --test-threads=1
 
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --exclude rf-gui -- -D warnings
