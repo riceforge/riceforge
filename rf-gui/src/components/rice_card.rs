@@ -35,13 +35,21 @@ pub fn RiceCard(rice: Rice) -> Element {
     let wm_label = rice.wm.to_string();
     let id = rice.id.clone();
 
+    let thumb_style = if let Some(url) = rice.screenshots.first() {
+        format!(
+            "background: {gradient}; background-image: url('{url}'); background-size: cover; background-position: center;"
+        )
+    } else {
+        format!("background: {gradient};")
+    };
+
     rsx! {
         Link {
             to: Route::Detail { id },
             class: "rice-card",
             div {
                 class: "rice-thumbnail",
-                style: "background: {gradient}",
+                style: "{thumb_style}",
                 div {
                     class: "rice-wm-badge",
                     style: "color: {color}; border-color: {color}",

@@ -8,6 +8,7 @@ use rf_core::{
     git::GitManager,
     index::IndexManager,
     installed::InstalledManager,
+    packages::PackageManager,
     pipeline::{PipelineManager, PipelineWhen},
 };
 
@@ -25,6 +26,7 @@ enum InstallState {
         links: Vec<String>,
         to_backup: Vec<String>,
         has_pipeline: bool,
+        missing_pkgs: Vec<String>,
     },
     Applying,
     Done(String),
@@ -40,11 +42,19 @@ enum RemoveState {
     Error(String),
 }
 
-fn do_plan(rice: Rice) -> rf_core::Result<(DeployPlan, bool)> {
+fn do_plan(rice: Rice) -> rf_core::Result<(DeployPlan, bool, Vec<String>)> {
     GitManager::clone_or_pull(&rice)?;
     let plan = DeployManager::plan(&rice)?;
     let has_pipeline = PipelineManager::load(&rice.id)?.is_some();
-    Ok((plan, has_pipeline))
+    let missing_pkgs = if PackageManager::is_available() {
+        PackageManager::missing(&rice.dependencies)
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
+    } else {
+        vec![]
+    };
+    Ok((plan, has_pipeline, missing_pkgs))
 }
 
 fn do_apply(rice: Rice) -> rf_core::Result<String> {
@@ -115,6 +125,14 @@ pub fn Detail(id: String) -> Element {
             let rice_for_apply = rice.clone();
             let rice_for_remove = rice.clone();
 
+            let hero_style = if let Some(url) = rice.screenshots.first() {
+                format!(
+                    "background: {gradient}; background-image: url('{url}'); background-size: cover; background-position: center;"
+                )
+            } else {
+                format!("background: {gradient};")
+            };
+
             rsx! {
                 div { class: "detail-page",
                     Link { to: Route::Browse {}, class: "back-link", "← Browse" }
@@ -122,7 +140,7 @@ pub fn Detail(id: String) -> Element {
                     div { class: "detail-hero",
                         div {
                             class: "detail-thumbnail",
-                            style: "background: {gradient}",
+                            style: "{hero_style}",
                             div {
                                 class: "rice-wm-badge",
                                 style: "color: {color}; border-color: {color}",
@@ -162,7 +180,7 @@ pub fn Detail(id: String) -> Element {
                                                     do_plan(rice)
                                                 }).await;
                                                 match result {
-                                                    Ok(Ok((plan, has_pipeline))) => {
+                                                    Ok(Ok((plan, has_pipeline, missing_pkgs))) => {
                                                         let links = plan.links.iter().map(|(_, d)| {
                                                             d.display().to_string()
                                                         }).collect();
@@ -173,6 +191,7 @@ pub fn Detail(id: String) -> Element {
                                                             links,
                                                             to_backup,
                                                             has_pipeline,
+                                                            missing_pkgs,
                                                         });
                                                     }
                                                     Ok(Err(e)) => install_state.set(InstallState::Error(e.to_string())),
@@ -202,10 +221,59 @@ pub fn Detail(id: String) -> Element {
                         }
                     }
 
+                    // Screenshots gallery
+                    if rice.screenshots.len() > 1 {
+                        div { class: "detail-screenshots",
+                            for url in rice.screenshots.iter() {
+                                img {
+                                    class: "detail-screenshot",
+                                    src: url.clone(),
+                                    loading: "lazy",
+                                }
+                            }
+                        }
+                    }
+
                     // Install plan confirmation
-                    if let InstallState::ConfirmPlan { links, to_backup, has_pipeline } = install_state() {
+                    if let InstallState::ConfirmPlan { links, to_backup, has_pipeline, missing_pkgs } = install_state() {
                         div { class: "plan-box",
                             h3 { class: "plan-title", "Deploy Plan" }
+
+                            if !missing_pkgs.is_empty() {
+                                {
+                                    let pkgs_str = missing_pkgs.join(" ");
+                                    let pacman_cmd = format!("sudo pacman -S --needed {pkgs_str}");
+                                    let cmd_for_copy = pacman_cmd.clone();
+                                    rsx! {
+                                        div { class: "missing-pkgs",
+                                            p { class: "missing-pkgs-title",
+                                                "⚠ Missing packages — install before proceeding:"
+                                            }
+                                            div { class: "missing-pkgs-chips",
+                                                for pkg in &missing_pkgs {
+                                                    span { class: "dep-chip dep-chip--missing", "{pkg}" }
+                                                }
+                                            }
+                                            div { class: "missing-pkgs-cmd-row",
+                                                code { class: "missing-pkgs-cmd", "{pacman_cmd}" }
+                                                button {
+                                                    class: "btn-ghost btn-sm",
+                                                    onclick: move |_| {
+                                                        let cmd = cmd_for_copy.clone();
+                                                        spawn(async move {
+                                                            eval(&format!(
+                                                                "navigator.clipboard.writeText(`{cmd}`).catch(()=>{{}})"
+                                                            )).await.ok();
+                                                        });
+                                                    },
+                                                    "Copy"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             p { class: "plan-desc", "{links.len()} symlink(s) will be created in your home directory." }
 
                             if !to_backup.is_empty() {
@@ -230,7 +298,9 @@ pub fn Detail(id: String) -> Element {
                             }
 
                             if has_pipeline {
-                                p { class: "plan-pipeline-note", "This rice includes a pipeline.toml — post-install scripts will run." }
+                                p { class: "plan-pipeline-note",
+                                    "This rice includes a pipeline.toml — post-install scripts will run."
+                                }
                             }
 
                             div { class: "plan-actions",

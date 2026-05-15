@@ -1,3 +1,4 @@
+use dioxus::desktop::{Config, WindowBuilder};
 use dioxus::prelude::*;
 use views::{Browse, Detail, Installed, Navbar, Settings};
 
@@ -23,7 +24,15 @@ const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 fn main() {
-    dioxus::launch(App);
+    dioxus::LaunchBuilder::new()
+        .with_cfg(
+            Config::default().with_window(
+                WindowBuilder::new()
+                    .with_decorations(false)
+                    .with_title("RiceForge"),
+            ),
+        )
+        .launch(App);
 }
 
 #[component]
