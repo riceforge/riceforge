@@ -14,21 +14,27 @@ A decentralized app store for Linux dotfile configurations (rices). Browse, inst
 
 ## Installation
 
-### From source (Arch Linux)
+### Arch Linux / CachyOS
+
+**CLI only:**
 
 ```bash
 git clone https://github.com/riceforge/riceforge
 cd riceforge
-cargo build --release
-sudo cp target/release/riceforge /usr/local/bin/
+cargo build --release -p riceforge
+sudo install -Dm755 target/release/riceforge /usr/local/bin/riceforge
+riceforge update
 ```
 
-### GUI
+**GUI (requires webkit2gtk):**
 
 ```bash
+sudo pacman -S --needed webkit2gtk-4.1 gtk3 libsoup3
 cargo build --release -p rf-gui
 ./target/release/rf-gui
 ```
+
+On Wayland/Hyprland the window is borderless by default — drag it with `Super+drag`.
 
 ## CLI Usage
 
