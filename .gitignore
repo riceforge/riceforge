@@ -24,6 +24,7 @@ AGENT_CONTEXT.md
 PROJECT_OVERVIEW.md
 LINUX_MIGRATION.md
 PROBLEMS.md
+GUIDE.md
 
 #temporary solution, stupid reasons :)
 Cargo.lock
