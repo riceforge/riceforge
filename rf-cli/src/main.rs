@@ -1,4 +1,5 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use rf_core::{
@@ -55,6 +56,16 @@ enum Commands {
         dry_run: bool,
         #[arg(long, help = "Skip package installation")]
         no_packages: bool,
+        #[arg(long, help = "Reinstall even if already installed")]
+        force: bool,
+    },
+
+    #[command(about = "Upgrade an installed rice to the latest commit")]
+    Upgrade {
+        #[arg(help = "Rice ID to upgrade (omit to use --all)")]
+        id: Option<String>,
+        #[arg(long, help = "Upgrade all installed rices")]
+        all: bool,
     },
 
     #[command(about = "Remove an installed rice")]
@@ -66,10 +77,19 @@ enum Commands {
         purge: bool,
     },
 
+    #[command(about = "Verify symlinks for installed rices")]
+    Check,
+
     #[command(about = "Manage config backups", subcommand_required = true)]
     Backup {
         #[command(subcommand)]
         cmd: BackupCmd,
+    },
+
+    #[command(about = "Generate shell completions", hide = true)]
+    Completions {
+        #[arg(value_enum)]
+        shell: Shell,
     },
 }
 
@@ -106,13 +126,20 @@ fn run(cli: Cli) -> rf_core::Result<()> {
             id,
             dry_run,
             no_packages,
-        } => cmd_install(&id, dry_run, no_packages),
+            force,
+        } => cmd_install(&id, dry_run, no_packages, force),
+        Commands::Upgrade { id, all } => cmd_upgrade(id.as_deref(), all),
         Commands::Remove { id, restore, purge } => cmd_remove(&id, restore, purge),
+        Commands::Check => cmd_check(),
         Commands::Backup { cmd } => match cmd {
             BackupCmd::List => cmd_backup_list(),
             BackupCmd::Restore { id } => cmd_backup_restore(&id),
             BackupCmd::Clean { keep } => cmd_backup_clean(keep),
         },
+        Commands::Completions { shell } => {
+            generate(shell, &mut Cli::command(), "riceforge", &mut std::io::stdout());
+            Ok(())
+        }
     }
 }
 
@@ -234,18 +261,17 @@ fn cmd_info(id: &str) -> rf_core::Result<()> {
     Ok(())
 }
 
-fn cmd_install(id: &str, dry_run: bool, no_packages: bool) -> rf_core::Result<()> {
+fn cmd_install(id: &str, dry_run: bool, no_packages: bool, force: bool) -> rf_core::Result<()> {
     let index = IndexManager::load_cached()?;
     let rice = IndexManager::find(&index, id)
         .ok_or_else(|| rf_core::RiceForgeError::NotFound(id.to_string()))?;
 
-    if !dry_run && InstalledManager::is_installed(id)? {
+    if !dry_run && !force && InstalledManager::is_installed(id)? {
         return Err(rf_core::RiceForgeError::AlreadyInstalled(id.to_string()));
     }
 
-    let pb = spinner(&format!("Cloning {}...", rice.id));
+    println!("{} cloning {}…", "→".cyan(), rice.repo_url.dimmed());
     let commit = GitManager::clone_or_pull(&rice)?;
-    pb.finish_and_clear();
     println!("{} cloned  {}", "✓".green(), commit[..8].dimmed());
 
     let plan = DeployManager::plan(&rice)?;
@@ -309,7 +335,58 @@ fn cmd_install(id: &str, dry_run: bool, no_packages: bool) -> rf_core::Result<()
         println!("{} pipeline steps completed", "✓".green());
     }
 
+    // Keep only the last 5 backups to avoid clutter
+    let _ = BackupManager::clean(5);
+
     println!("{} {} installed", "✓".green(), rice.name.bold());
+    Ok(())
+}
+
+fn cmd_upgrade(id: Option<&str>, all: bool) -> rf_core::Result<()> {
+    let index = IndexManager::load_cached()?;
+
+    let ids: Vec<String> = if all {
+        InstalledManager::list()?.into_iter().map(|e| e.rice_id).collect()
+    } else if let Some(id) = id {
+        vec![id.to_string()]
+    } else {
+        eprintln!("{} specify a rice ID or use --all", "error:".red().bold());
+        std::process::exit(1);
+    };
+
+    if ids.is_empty() {
+        println!("{}", "Nothing to upgrade.".dimmed());
+        return Ok(());
+    }
+
+    for rid in &ids {
+        let rice = match IndexManager::find(&index, rid) {
+            Some(r) => r,
+            None => {
+                println!("{} {} — not in index, skipping", "!".yellow(), rid.bold());
+                continue;
+            }
+        };
+
+        if !InstalledManager::is_installed(rid)? {
+            println!("{} {} — not installed, skipping", "!".yellow(), rid.bold());
+            continue;
+        }
+
+        println!("{} upgrading {}…", "→".cyan(), rid.bold());
+        let commit = GitManager::clone_or_pull(&rice)?;
+
+        let plan = DeployManager::plan(&rice)?;
+        DeployManager::apply(&plan)?;
+        InstalledManager::add(rid, &commit, None)?;
+
+        println!(
+            "{} {}  {}",
+            "✓".green(),
+            rid.bold(),
+            commit[..8].dimmed()
+        );
+    }
     Ok(())
 }
 
@@ -348,6 +425,97 @@ fn cmd_remove(id: &str, restore: bool, purge: bool) -> rf_core::Result<()> {
     }
 
     println!("{} {} removed", "✓".green(), id.bold());
+    Ok(())
+}
+
+fn cmd_check() -> rf_core::Result<()> {
+    let entries = InstalledManager::list()?;
+    if entries.is_empty() {
+        println!("{}", "No rices installed.".dimmed());
+        return Ok(());
+    }
+
+    let index = IndexManager::load_cached()?;
+    let mut total_ok = 0usize;
+    let mut total_broken = 0usize;
+
+    for entry in &entries {
+        let rice = match IndexManager::find(&index, &entry.rice_id) {
+            Some(r) => r,
+            None => {
+                println!(
+                    "{} {}  {}",
+                    "?".yellow(),
+                    entry.rice_id.bold(),
+                    "not in index".dimmed()
+                );
+                continue;
+            }
+        };
+
+        let plan = match DeployManager::plan(&rice) {
+            Ok(p) => p,
+            Err(e) => {
+                println!(
+                    "{} {}  {}",
+                    "✗".red(),
+                    entry.rice_id.bold(),
+                    e.to_string().dimmed()
+                );
+                total_broken += 1;
+                continue;
+            }
+        };
+
+        let mut broken = Vec::new();
+        for (src, dest) in &plan.links {
+            if dest.is_symlink() {
+                // Check the symlink actually points to src
+                if let Ok(target) = std::fs::read_link(dest) {
+                    if target != *src {
+                        broken.push(dest.display().to_string());
+                    }
+                } else {
+                    broken.push(dest.display().to_string());
+                }
+            } else if !dest.exists() {
+                broken.push(dest.display().to_string());
+            }
+        }
+
+        if broken.is_empty() {
+            println!(
+                "{} {}  {} symlinks OK",
+                "✓".green(),
+                entry.rice_id.bold(),
+                plan.links.len()
+            );
+            total_ok += 1;
+        } else {
+            println!(
+                "{} {}  {}/{} broken",
+                "✗".red(),
+                entry.rice_id.bold(),
+                broken.len(),
+                plan.links.len()
+            );
+            for b in &broken {
+                println!("    {}", b.dimmed());
+            }
+            total_broken += 1;
+        }
+    }
+
+    println!();
+    println!(
+        "  {} OK  {} broken",
+        total_ok.to_string().green(),
+        if total_broken > 0 {
+            total_broken.to_string().red()
+        } else {
+            total_broken.to_string().dimmed()
+        }
+    );
     Ok(())
 }
 

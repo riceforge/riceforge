@@ -122,6 +122,7 @@ pub fn Detail(id: String) -> Element {
         use_signal(move || InstalledManager::is_installed(&id_installed).unwrap_or(false));
     let mut install_state: Signal<InstallState> = use_signal(|| InstallState::Idle);
     let mut remove_state: Signal<RemoveState> = use_signal(|| RemoveState::Idle);
+    let mut copied: Signal<bool> = use_signal(|| false);
 
     match rice() {
         None => rsx! {
@@ -281,16 +282,22 @@ pub fn Detail(id: String) -> Element {
                                             div { class: "missing-pkgs-cmd-row",
                                                 code { class: "missing-pkgs-cmd", "{pacman_cmd}" }
                                                 button {
-                                                    class: "btn-ghost btn-sm",
+                                                    class: if copied() { "btn-ghost btn-sm copied" } else { "btn-ghost btn-sm" },
                                                     onclick: move |_| {
+                                                        if copied() { return; }
                                                         let cmd = cmd_for_copy.clone();
                                                         spawn(async move {
                                                             tokio::task::spawn_blocking(move || {
                                                                 copy_to_clipboard(&cmd);
                                                             }).await.ok();
+                                                            copied.set(true);
+                                                            tokio::time::sleep(
+                                                                std::time::Duration::from_secs(2)
+                                                            ).await;
+                                                            copied.set(false);
                                                         });
                                                     },
-                                                    "Copy"
+                                                    if copied() { "Copied!" } else { "Copy" }
                                                 }
                                             }
                                         }
