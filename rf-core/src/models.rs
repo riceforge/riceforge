@@ -94,6 +94,9 @@ pub struct BackupEntry {
 pub struct DeployPlan {
     pub links: Vec<(std::path::PathBuf, std::path::PathBuf)>,
     pub to_backup: Vec<std::path::PathBuf>,
+    /// Files that are symlinks belonging to a different installed rice.
+    /// Each entry is (dest_path, current_link_target).
+    pub conflicts: Vec<(std::path::PathBuf, std::path::PathBuf)>,
 }
 
 #[cfg(test)]

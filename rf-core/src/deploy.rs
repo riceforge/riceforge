@@ -3,7 +3,6 @@ use crate::{
     error::{Result, RiceForgeError},
     models::{DeployPlan, Rice},
 };
-#[cfg(unix)]
 use std::fs;
 use std::path::PathBuf;
 use walkdir::WalkDir;
@@ -45,6 +44,9 @@ impl DeployManager {
 
         let mut links = Vec::new();
         let mut to_backup = Vec::new();
+        let mut conflicts = Vec::new();
+
+        let rices_dir = Paths::rices_dir();
 
         for entry in WalkDir::new(&rice_dir)
             .min_depth(1)
@@ -70,13 +72,26 @@ impl DeployManager {
             }
 
             let dest = home.join(relative);
-            if dest.exists() && !dest.is_symlink() {
+
+            if dest.is_symlink() {
+                if let Ok(target) = fs::read_link(&dest) {
+                    // Conflict: symlink points into a different rice directory
+                    if target.starts_with(&rices_dir) && !target.starts_with(&rice_dir) {
+                        conflicts.push((dest.clone(), target));
+                    }
+                }
+            } else if dest.exists() {
                 to_backup.push(dest.clone());
             }
+
             links.push((src, dest));
         }
 
-        Ok(DeployPlan { links, to_backup })
+        Ok(DeployPlan {
+            links,
+            to_backup,
+            conflicts,
+        })
     }
 
     #[cfg(unix)]

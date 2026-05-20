@@ -1,4 +1,4 @@
-use crate::Route;
+use crate::{InstalledCount, Route};
 use crate::components::rice_card::{thumbnail_gradient, wm_color};
 use dioxus::prelude::*;
 use rf_core::{
@@ -51,6 +51,7 @@ enum InstallState {
         to_backup: Vec<String>,
         has_pipeline: bool,
         missing_pkgs: Vec<String>,
+        conflicts: Vec<String>,
     },
     Applying,
     Done(String),
@@ -66,7 +67,7 @@ enum RemoveState {
     Error(String),
 }
 
-fn do_plan(rice: Rice) -> rf_core::Result<(DeployPlan, bool, Vec<String>)> {
+fn do_plan(rice: Rice) -> rf_core::Result<(DeployPlan, bool, Vec<String>, Vec<String>)> {
     GitManager::clone_or_pull(&rice)?;
     let plan = DeployManager::plan(&rice)?;
     let has_pipeline = PipelineManager::load(&rice.id)?.is_some();
@@ -78,7 +79,12 @@ fn do_plan(rice: Rice) -> rf_core::Result<(DeployPlan, bool, Vec<String>)> {
     } else {
         vec![]
     };
-    Ok((plan, has_pipeline, missing_pkgs))
+    let conflicts = plan
+        .conflicts
+        .iter()
+        .map(|(dest, _)| dest.display().to_string())
+        .collect();
+    Ok((plan, has_pipeline, missing_pkgs, conflicts))
 }
 
 fn do_apply(rice: Rice) -> rf_core::Result<String> {
@@ -123,6 +129,7 @@ pub fn Detail(id: String) -> Element {
     let mut install_state: Signal<InstallState> = use_signal(|| InstallState::Idle);
     let mut remove_state: Signal<RemoveState> = use_signal(|| RemoveState::Idle);
     let mut copied: Signal<bool> = use_signal(|| false);
+    let mut installed_count: InstalledCount = use_context();
 
     match rice() {
         None => rsx! {
@@ -205,7 +212,7 @@ pub fn Detail(id: String) -> Element {
                                                     do_plan(rice)
                                                 }).await;
                                                 match result {
-                                                    Ok(Ok((plan, has_pipeline, missing_pkgs))) => {
+                                                    Ok(Ok((plan, has_pipeline, missing_pkgs, conflicts))) => {
                                                         let links = plan.links.iter().map(|(_, d)| {
                                                             d.display().to_string()
                                                         }).collect();
@@ -217,6 +224,7 @@ pub fn Detail(id: String) -> Element {
                                                             to_backup,
                                                             has_pipeline,
                                                             missing_pkgs,
+                                                            conflicts,
                                                         });
                                                     }
                                                     Ok(Err(e)) => install_state.set(InstallState::Error(e.to_string())),
@@ -260,9 +268,23 @@ pub fn Detail(id: String) -> Element {
                     }
 
                     // Install plan confirmation
-                    if let InstallState::ConfirmPlan { links, to_backup, has_pipeline, missing_pkgs } = install_state() {
+                    if let InstallState::ConfirmPlan { links, to_backup, has_pipeline, missing_pkgs, conflicts } = install_state() {
                         div { class: "plan-box",
                             h3 { class: "plan-title", "Deploy Plan" }
+
+                            if !conflicts.is_empty() {
+                                div { class: "conflict-box",
+                                    p { class: "conflict-title",
+                                        "⚠ Conflict — these files belong to another rice:"
+                                    }
+                                    for path in &conflicts {
+                                        div { class: "plan-file plan-file--conflict", "{path}" }
+                                    }
+                                    p { class: "conflict-hint",
+                                        "Remove the other rice first, or the conflicting symlinks will be overwritten."
+                                    }
+                                }
+                            }
 
                             if !missing_pkgs.is_empty() {
                                 {
@@ -347,6 +369,10 @@ pub fn Detail(id: String) -> Element {
                                             match result {
                                                 Ok(Ok(commit)) => {
                                                     installed.set(true);
+                                                    let count = InstalledManager::list()
+                                                        .map(|l| l.len())
+                                                        .unwrap_or(0);
+                                                    installed_count.set(count);
                                                     let short = commit.get(..8).unwrap_or(&commit).to_string();
                                                     install_state.set(InstallState::Done(short));
                                                 }
@@ -398,6 +424,10 @@ pub fn Detail(id: String) -> Element {
                                             match result {
                                                 Ok(Ok(())) => {
                                                     installed.set(false);
+                                                    let count = InstalledManager::list()
+                                                        .map(|l| l.len())
+                                                        .unwrap_or(0);
+                                                    installed_count.set(count);
                                                     remove_state.set(RemoveState::Done);
                                                 }
                                                 Ok(Err(e)) => remove_state.set(RemoveState::Error(e.to_string())),

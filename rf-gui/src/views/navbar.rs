@@ -1,10 +1,9 @@
-use crate::Route;
+use crate::{InstalledCount, Route};
 use dioxus::prelude::*;
-use rf_core::installed::InstalledManager;
 
 #[component]
 pub fn Navbar() -> Element {
-    let installed_count = use_memo(|| InstalledManager::list().map(|l| l.len()).unwrap_or(0));
+    let installed_count: InstalledCount = use_context();
 
     rsx! {
         nav { class: "navbar",

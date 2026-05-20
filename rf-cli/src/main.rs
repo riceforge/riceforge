@@ -285,6 +285,25 @@ fn cmd_install(id: &str, dry_run: bool, no_packages: bool, force: bool) -> rf_co
         );
     }
 
+    if !plan.conflicts.is_empty() {
+        println!("\n{}", "conflicts — files owned by another rice:".red().bold());
+        for (dest, target) in &plan.conflicts {
+            let other = target
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| target.display().to_string());
+            println!(
+                "  {} → currently linked to {}",
+                dest.display().to_string().red(),
+                other.dimmed()
+            );
+        }
+        println!(
+            "  {} remove the other rice first, or use --force to overwrite",
+            "!".yellow()
+        );
+    }
+
     if !plan.to_backup.is_empty() {
         println!("\n{}", "will back up:".yellow());
         for f in &plan.to_backup {
@@ -305,6 +324,12 @@ fn cmd_install(id: &str, dry_run: bool, no_packages: bool, force: bool) -> rf_co
     if dry_run {
         println!("\n{} dry run — no changes applied", "→".cyan());
         return Ok(());
+    }
+
+    if !plan.conflicts.is_empty() && !force {
+        return Err(rf_core::RiceForgeError::Deploy(
+            "conflicting symlinks detected — remove the other rice first or use --force".into(),
+        ));
     }
 
     let backup_id = if !plan.to_backup.is_empty() {
