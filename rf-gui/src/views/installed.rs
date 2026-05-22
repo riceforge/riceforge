@@ -1,4 +1,4 @@
-use crate::Route;
+use crate::{InstalledCount, Route};
 use dioxus::prelude::*;
 use rf_core::{
     InstalledRice,
@@ -43,10 +43,27 @@ fn do_purge(rice_id: String) -> rf_core::Result<()> {
     Ok(())
 }
 
+fn do_upgrade(rice_id: String) -> rf_core::Result<String> {
+    let index = IndexManager::load_cached()?;
+    let rice = index
+        .rices
+        .into_iter()
+        .find(|r| r.id == rice_id)
+        .ok_or_else(|| rf_core::RiceForgeError::NotFound(rice_id.clone()))?;
+
+    let commit = GitManager::clone_or_pull(&rice)?;
+    let plan = DeployManager::plan(&rice)?;
+    DeployManager::apply(&plan)?;
+    InstalledManager::add(&rice_id, &commit, None)?;
+    Ok(commit)
+}
+
 #[derive(Clone, PartialEq)]
 enum RowOp {
     Idle,
     Removing,
+    Upgrading,
+    UpgradeDone(String), // short hash
     Error(String),
 }
 
@@ -79,7 +96,9 @@ pub fn Installed() -> Element {
                             InstalledRow {
                                 key: "{entry.rice_id}",
                                 entry: entry.clone(),
-                                on_removed: move || *revision.write() += 1,
+                                on_removed: move || {
+                                    *revision.write() += 1;
+                                },
                             }
                         })
                     }
@@ -93,7 +112,8 @@ pub fn Installed() -> Element {
 fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
     let rice_id = entry.rice_id.clone();
     let rice_id_remove = entry.rice_id.clone();
-    let rice_id_purge = entry.rice_id.clone();
+    let rice_id_purge  = entry.rice_id.clone();
+    let rice_id_upgrade = entry.rice_id.clone();
 
     let display_name = find_rice_name(&rice_id).unwrap_or_else(|| rice_id.clone());
     let short_hash = entry
@@ -105,6 +125,7 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
 
     let mut op: Signal<RowOp> = use_signal(|| RowOp::Idle);
     let mut confirm_purge = use_signal(|| false);
+    let mut installed_count: InstalledCount = use_context();
 
     rsx! {
         div { class: "installed-row",
@@ -118,7 +139,13 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
                     span { class: "installed-row-id", "{rice_id}" }
                 }
                 div { class: "installed-row-meta",
-                    span { class: "installed-row-hash", "{short_hash}" }
+                    span { class: "installed-row-hash",
+                        if let RowOp::UpgradeDone(ref h) = op() {
+                            "{h}"
+                        } else {
+                            "{short_hash}"
+                        }
+                    }
                     span { class: "installed-row-date", "installed {date}" }
                     if entry.backup_id.is_some() {
                         span { class: "installed-row-backup", "backup available" }
@@ -127,7 +154,29 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
             }
 
             div { class: "installed-row-actions",
-                if matches!(op(), RowOp::Idle) && !confirm_purge() {
+                if matches!(op(), RowOp::Idle | RowOp::UpgradeDone(_)) && !confirm_purge() {
+                    // Upgrade
+                    button {
+                        class: "btn-ghost btn-sm",
+                        title: "Pull latest commit and redeploy symlinks",
+                        onclick: move |_| {
+                            let id = rice_id_upgrade.clone();
+                            spawn(async move {
+                                op.set(RowOp::Upgrading);
+                                let result = tokio::task::spawn_blocking(move || do_upgrade(id)).await;
+                                match result {
+                                    Ok(Ok(commit)) => {
+                                        let short = commit.get(..8).unwrap_or(&commit).to_string();
+                                        op.set(RowOp::UpgradeDone(short));
+                                    }
+                                    Ok(Err(e)) => op.set(RowOp::Error(e.to_string())),
+                                    Err(e)     => op.set(RowOp::Error(e.to_string())),
+                                }
+                            });
+                        },
+                        "Upgrade"
+                    }
+                    // Remove
                     button {
                         class: "btn-secondary btn-sm",
                         onclick: move |_| {
@@ -137,14 +186,21 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
                                 op.set(RowOp::Removing);
                                 let result = tokio::task::spawn_blocking(move || do_remove(id)).await;
                                 match result {
-                                    Ok(Ok(())) => { on_removed.call(()); }
+                                    Ok(Ok(())) => {
+                                        let count = InstalledManager::list()
+                                            .map(|l| l.len())
+                                            .unwrap_or(0);
+                                        installed_count.set(count);
+                                        on_removed.call(());
+                                    }
                                     Ok(Err(e)) => op.set(RowOp::Error(e.to_string())),
-                                    Err(e) => op.set(RowOp::Error(e.to_string())),
+                                    Err(e)     => op.set(RowOp::Error(e.to_string())),
                                 }
                             });
                         },
                         "Remove"
                     }
+                    // Purge trigger
                     button {
                         class: "btn-ghost btn-sm",
                         onclick: move |_| confirm_purge.set(true),
@@ -164,9 +220,15 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
                                     op.set(RowOp::Removing);
                                     let result = tokio::task::spawn_blocking(move || do_purge(id)).await;
                                     match result {
-                                        Ok(Ok(())) => { on_removed.call(()); }
+                                        Ok(Ok(())) => {
+                                            let count = InstalledManager::list()
+                                                .map(|l| l.len())
+                                                .unwrap_or(0);
+                                            installed_count.set(count);
+                                            on_removed.call(());
+                                        }
                                         Ok(Err(e)) => op.set(RowOp::Error(e.to_string())),
-                                        Err(e) => op.set(RowOp::Error(e.to_string())),
+                                        Err(e)     => op.set(RowOp::Error(e.to_string())),
                                     }
                                 });
                             },
@@ -183,7 +245,12 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
                 if matches!(op(), RowOp::Removing) {
                     span { class: "row-op-status", "Removing…" }
                 }
-
+                if matches!(op(), RowOp::Upgrading) {
+                    span { class: "row-op-status", "Upgrading…" }
+                }
+                if let RowOp::UpgradeDone(_) = op() {
+                    span { class: "row-op-status row-op-status--ok", "✓ Updated" }
+                }
                 if let RowOp::Error(msg) = op() {
                     span { class: "row-op-status row-op-status--error", "{msg}" }
                 }

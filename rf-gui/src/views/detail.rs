@@ -358,7 +358,7 @@ pub fn Detail(id: String) -> Element {
 
                             div { class: "plan-actions",
                                 button {
-                                    class: "btn-primary",
+                                    class: if conflicts.is_empty() { "btn-primary" } else { "btn-danger" },
                                     onclick: move |_| {
                                         let rice = rice_for_apply.clone();
                                         spawn(async move {

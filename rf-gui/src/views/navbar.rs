@@ -1,9 +1,11 @@
 use crate::{InstalledCount, Route};
+use dioxus::desktop::use_window;
 use dioxus::prelude::*;
 
 #[component]
 pub fn Navbar() -> Element {
     let installed_count: InstalledCount = use_context();
+    let window = use_window();
 
     rsx! {
         nav { class: "navbar",
@@ -35,6 +37,14 @@ pub fn Navbar() -> Element {
                         class: "nav-link",
                         active_class: "nav-link--active",
                         "Settings"
+                    }
+                }
+                div { class: "navbar-window-controls",
+                    button {
+                        class: "wc-btn wc-btn--close",
+                        title: "Close",
+                        onclick: move |_| window.close(),
+                        "×"
                     }
                 }
             }
