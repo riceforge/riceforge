@@ -12,6 +12,14 @@ use rf_core::{
     pipeline::{PipelineManager, PipelineWhen},
 };
 
+#[derive(Clone, PartialEq)]
+enum PkgState {
+    Idle,
+    Installing,
+    Done,
+    Error(String),
+}
+
 fn copy_to_clipboard(text: &str) {
     use std::io::Write;
     if let Ok(mut child) = std::process::Command::new("wl-copy")
@@ -67,8 +75,13 @@ enum RemoveState {
     Error(String),
 }
 
-fn do_plan(rice: Rice) -> rf_core::Result<(DeployPlan, bool, Vec<String>, Vec<String>)> {
-    GitManager::clone_or_pull(&rice)?;
+fn do_plan(
+    rice: Rice,
+    tx: std::sync::mpsc::Sender<String>,
+) -> rf_core::Result<(DeployPlan, bool, Vec<String>, Vec<String>)> {
+    GitManager::clone_or_pull_with_progress(&rice, move |line| {
+        let _ = tx.send(line);
+    })?;
     let plan = DeployManager::plan(&rice)?;
     let has_pipeline = PipelineManager::load(&rice.id)?.is_some();
     let missing_pkgs = if PackageManager::is_available() {
@@ -87,8 +100,10 @@ fn do_plan(rice: Rice) -> rf_core::Result<(DeployPlan, bool, Vec<String>, Vec<St
     Ok((plan, has_pipeline, missing_pkgs, conflicts))
 }
 
-fn do_apply(rice: Rice) -> rf_core::Result<String> {
-    let commit = GitManager::clone_or_pull(&rice)?;
+fn do_apply(rice: Rice, tx: std::sync::mpsc::Sender<String>) -> rf_core::Result<String> {
+    let commit = GitManager::clone_or_pull_with_progress(&rice, move |line| {
+        let _ = tx.send(line);
+    })?;
     let plan = DeployManager::plan(&rice)?;
 
     let backup_id = if !plan.to_backup.is_empty() {
@@ -129,7 +144,12 @@ pub fn Detail(id: String) -> Element {
     let mut install_state: Signal<InstallState> = use_signal(|| InstallState::Idle);
     let mut remove_state: Signal<RemoveState> = use_signal(|| RemoveState::Idle);
     let mut copied: Signal<bool> = use_signal(|| false);
+    let mut git_progress: Signal<String> = use_signal(String::new);
+    let mut pkg_state: Signal<PkgState> = use_signal(|| PkgState::Idle);
     let mut installed_count: InstalledCount = use_context();
+
+    // Detect the current WM once; compute compat info eagerly as plain data
+    let user_wm_name: Option<String> = rf_core::detect_wm().map(|w| w.to_string());
 
     match rice() {
         None => rsx! {
@@ -153,17 +173,27 @@ pub fn Detail(id: String) -> Element {
                 InstallState::Planning | InstallState::Applying
             ) || matches!(remove_state(), RemoveState::Removing);
 
+            // Button label for the "Install Packages" button — computed reactively
+            let pkg_btn_label = match pkg_state() {
+                PkgState::Idle => "Install Packages",
+                PkgState::Installing => "Installing…",
+                PkgState::Done => "✓ Installed",
+                PkgState::Error(_) => "Retry",
+            };
+
+            // WM compatibility: None = unknown WM, Some(true/false) = match/mismatch
+            let rice_wm_str = rice.wm.to_string();
+            let wm_compat: Option<bool> = user_wm_name
+                .as_deref()
+                .map(|u| u.to_lowercase() == rice_wm_str.to_lowercase());
+
             let rice_for_plan = rice.clone();
             let rice_for_apply = rice.clone();
             let rice_for_remove = rice.clone();
 
-            let hero_style = if let Some(url) = rice.screenshots.first() {
-                format!(
-                    "background: {gradient}; background-image: url('{url}'); background-size: cover; background-position: center;"
-                )
-            } else {
-                format!("background: {gradient};")
-            };
+            // Hero thumbnail: use <img> overlay for reliable rendering
+            let hero_bg = format!("background: {gradient};");
+            let hero_img = rice.screenshots.first().cloned();
 
             rsx! {
                 div { class: "detail-page",
@@ -172,7 +202,14 @@ pub fn Detail(id: String) -> Element {
                     div { class: "detail-hero",
                         div {
                             class: "detail-thumbnail",
-                            style: "{hero_style}",
+                            style: "{hero_bg}",
+                            if let Some(url) = hero_img {
+                                img {
+                                    class: "detail-thumbnail-img",
+                                    src: url,
+                                    loading: "eager",
+                                }
+                            }
                             div {
                                 class: "rice-wm-badge",
                                 style: "color: {color}; border-color: {color}",
@@ -193,6 +230,18 @@ pub fn Detail(id: String) -> Element {
                             }
                             p { class: "detail-description", "{rice.description}" }
 
+                            // WM compatibility indicator
+                            if wm_compat == Some(true) {
+                                div { class: "wm-compat wm-compat--ok",
+                                    "✓ Compatible with your window manager"
+                                }
+                            }
+                            if wm_compat == Some(false) {
+                                div { class: "wm-compat wm-compat--warn",
+                                    "⚠ Designed for {wm_label} — may not work on your current setup"
+                                }
+                            }
+
                             div { class: "detail-actions",
                                 a {
                                     class: "btn-secondary",
@@ -208,10 +257,29 @@ pub fn Detail(id: String) -> Element {
                                             let rice = rice_for_plan.clone();
                                             spawn(async move {
                                                 install_state.set(InstallState::Planning);
-                                                let result = tokio::task::spawn_blocking(move || {
-                                                    do_plan(rice)
-                                                }).await;
-                                                match result {
+                                                git_progress.set(String::new());
+
+                                                let (tx, rx) = std::sync::mpsc::channel::<String>();
+                                                let rice_clone = rice.clone();
+                                                let handle = tokio::task::spawn_blocking(move || {
+                                                    do_plan(rice_clone, tx)
+                                                });
+
+                                                // Poll progress while clone/pull runs
+                                                while !handle.is_finished() {
+                                                    if let Ok(line) = rx.try_recv() {
+                                                        git_progress.set(line);
+                                                    }
+                                                    tokio::time::sleep(
+                                                        std::time::Duration::from_millis(100)
+                                                    ).await;
+                                                }
+                                                // Drain remaining messages
+                                                while let Ok(line) = rx.try_recv() {
+                                                    git_progress.set(line);
+                                                }
+
+                                                match handle.await {
                                                     Ok(Ok((plan, has_pipeline, missing_pkgs, conflicts))) => {
                                                         let links = plan.links.iter().map(|(_, d)| {
                                                             d.display().to_string()
@@ -219,6 +287,7 @@ pub fn Detail(id: String) -> Element {
                                                         let to_backup = plan.to_backup.iter().map(|p| {
                                                             p.display().to_string()
                                                         }).collect();
+                                                        git_progress.set(String::new());
                                                         install_state.set(InstallState::ConfirmPlan {
                                                             links,
                                                             to_backup,
@@ -254,7 +323,7 @@ pub fn Detail(id: String) -> Element {
                         }
                     }
 
-                    // Screenshots gallery
+                    // Screenshots gallery (remaining screenshots after the first)
                     if rice.screenshots.len() > 1 {
                         div { class: "detail-screenshots",
                             for url in rice.screenshots.iter() {
@@ -262,6 +331,25 @@ pub fn Detail(id: String) -> Element {
                                     class: "detail-screenshot",
                                     src: url.clone(),
                                     loading: "lazy",
+                                }
+                            }
+                        }
+                    }
+
+                    // Git progress (shown during Planning and Applying)
+                    if matches!(install_state(), InstallState::Planning | InstallState::Applying) {
+                        div { class: "op-status op-status--running",
+                            if matches!(install_state(), InstallState::Planning) {
+                                "Cloning repository…"
+                            } else {
+                                "Installing…"
+                            }
+                            {
+                                let prog = git_progress();
+                                if !prog.is_empty() {
+                                    rsx! { div { class: "git-progress-line", "{prog}" } }
+                                } else {
+                                    None
                                 }
                             }
                         }
@@ -291,6 +379,7 @@ pub fn Detail(id: String) -> Element {
                                     let pkgs_str = missing_pkgs.join(" ");
                                     let pacman_cmd = format!("sudo pacman -S --needed {pkgs_str}");
                                     let cmd_for_copy = pacman_cmd.clone();
+                                    let pkgs_for_install = missing_pkgs.clone();
                                     rsx! {
                                         div { class: "missing-pkgs",
                                             p { class: "missing-pkgs-title",
@@ -321,6 +410,36 @@ pub fn Detail(id: String) -> Element {
                                                     },
                                                     if copied() { "Copied!" } else { "Copy" }
                                                 }
+                                            }
+
+                                            // One-click install via pkexec (shows polkit auth dialog)
+                                            div { class: "missing-pkgs-install-row",
+                                                button {
+                                                    class: "btn-primary btn-sm",
+                                                    disabled: matches!(pkg_state(), PkgState::Installing | PkgState::Done),
+                                                    onclick: move |_| {
+                                                        let pkgs = pkgs_for_install.clone();
+                                                        spawn(async move {
+                                                            pkg_state.set(PkgState::Installing);
+                                                            let result = tokio::task::spawn_blocking(move || {
+                                                                PackageManager::install_gui(&pkgs)
+                                                            }).await;
+                                                            match result {
+                                                                Ok(Ok(())) => pkg_state.set(PkgState::Done),
+                                                                Ok(Err(e)) => pkg_state.set(PkgState::Error(e.to_string())),
+                                                                Err(e)    => pkg_state.set(PkgState::Error(e.to_string())),
+                                                            }
+                                                        });
+                                                    },
+                                                    "{pkg_btn_label}"
+                                                }
+                                                span { class: "pkg-install-hint",
+                                                    "Uses pkexec — a password dialog will appear"
+                                                }
+                                            }
+
+                                            if let PkgState::Error(msg) = pkg_state() {
+                                                p { class: "pkg-install-error", "{msg}" }
                                             }
                                         }
                                     }
@@ -363,10 +482,27 @@ pub fn Detail(id: String) -> Element {
                                         let rice = rice_for_apply.clone();
                                         spawn(async move {
                                             install_state.set(InstallState::Applying);
-                                            let result = tokio::task::spawn_blocking(move || {
-                                                do_apply(rice)
-                                            }).await;
-                                            match result {
+                                            git_progress.set(String::new());
+
+                                            let (tx, rx) = std::sync::mpsc::channel::<String>();
+                                            let rice_clone = rice.clone();
+                                            let handle = tokio::task::spawn_blocking(move || {
+                                                do_apply(rice_clone, tx)
+                                            });
+
+                                            while !handle.is_finished() {
+                                                if let Ok(line) = rx.try_recv() {
+                                                    git_progress.set(line);
+                                                }
+                                                tokio::time::sleep(
+                                                    std::time::Duration::from_millis(100)
+                                                ).await;
+                                            }
+                                            while let Ok(line) = rx.try_recv() {
+                                                git_progress.set(line);
+                                            }
+
+                                            match handle.await {
                                                 Ok(Ok(commit)) => {
                                                     installed.set(true);
                                                     let count = InstalledManager::list()
@@ -374,6 +510,7 @@ pub fn Detail(id: String) -> Element {
                                                         .unwrap_or(0);
                                                     installed_count.set(count);
                                                     let short = commit.get(..8).unwrap_or(&commit).to_string();
+                                                    git_progress.set(String::new());
                                                     install_state.set(InstallState::Done(short));
                                                 }
                                                 Ok(Err(e)) => install_state.set(InstallState::Error(e.to_string())),
@@ -390,10 +527,6 @@ pub fn Detail(id: String) -> Element {
                                 }
                             }
                         }
-                    }
-
-                    if matches!(install_state(), InstallState::Applying) {
-                        div { class: "op-status op-status--running", "Installing… this may take a moment" }
                     }
 
                     if let InstallState::Done(hash) = install_state() {

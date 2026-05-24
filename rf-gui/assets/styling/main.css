@@ -20,8 +20,14 @@
     --radius-sm: 4px;
 }
 
-html, body {
+html {
     height: 100%;
+    overflow: hidden;
+}
+
+body {
+    height: 100%;
+    overflow-y: auto;
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Helvetica Neue', sans-serif;
@@ -166,9 +172,20 @@ input { font: inherit; outline: none; }
 .rice-thumbnail {
     height: 160px;
     position: relative;
+    overflow: hidden;
     display: flex;
     align-items: flex-end;
     padding: 10px;
+}
+
+/* Screenshot image overlay — fills the thumbnail, fades on load */
+.rice-thumbnail-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .rice-wm-badge {
@@ -179,7 +196,9 @@ input { font: inherit; outline: none; }
     border-radius: 3px;
     border: 1px solid currentColor;
     text-transform: uppercase;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.55);
+    position: relative; /* sit above .rice-thumbnail-img */
+    z-index: 1;
 }
 
 .rice-info {
@@ -992,6 +1011,26 @@ a.rice-card {
     user-select: all;
 }
 
+.missing-pkgs-install-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(234, 179, 8, 0.15);
+}
+
+.pkg-install-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.pkg-install-error {
+    font-size: 12px;
+    color: #f87171;
+    margin-top: 6px;
+}
+
 /* Window close button */
 .navbar-window-controls {
     margin-left: auto;
@@ -1115,6 +1154,59 @@ a.rice-card {
 
 .plan-file--conflict {
     color: #f87171;
+}
+
+/* Detail thumbnail image overlay */
+.detail-thumbnail {
+    position: relative;
+    overflow: hidden;
+}
+
+.detail-thumbnail-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.detail-thumbnail .rice-wm-badge {
+    position: relative;
+    z-index: 1;
+}
+
+/* Git progress line shown during clone/pull */
+.git-progress-line {
+    font-size: 11px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    opacity: 0.75;
+    margin-top: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* WM compatibility badge */
+.wm-compat {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    display: inline-block;
+    margin-top: 2px;
+}
+
+.wm-compat--ok {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.08);
+    border: 1px solid rgba(74, 222, 128, 0.25);
+}
+
+.wm-compat--warn {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.07);
+    border: 1px solid rgba(251, 191, 36, 0.28);
 }
 
 /* Responsive */

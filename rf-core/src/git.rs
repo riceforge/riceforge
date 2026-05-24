@@ -3,7 +3,7 @@ use crate::{
     error::{Result, RiceForgeError},
     models::Rice,
 };
-use std::{fs, path::Path, process::Command, time::{Duration, Instant}};
+use std::{fs, io::Read, path::Path, process::Command, time::{Duration, Instant}};
 
 const CLONE_TIMEOUT_SECS: u64 = 300; // 5 min for large repos (HyDE ~500MB)
 const PULL_TIMEOUT_SECS:  u64 = 120;
@@ -11,22 +11,42 @@ const PULL_TIMEOUT_SECS:  u64 = 120;
 pub struct GitManager;
 
 impl GitManager {
+    /// Clone or pull without progress reporting (used by CLI).
     pub fn clone_or_pull(rice: &Rice) -> Result<String> {
+        Self::clone_or_pull_with_progress(rice, |_| {})
+    }
+
+    /// Clone or pull, streaming each output line to `on_line`.
+    /// Used by the GUI to show live progress.
+    pub fn clone_or_pull_with_progress<F>(rice: &Rice, on_line: F) -> Result<String>
+    where
+        F: Fn(String) + Send + 'static,
+    {
         let dest = Paths::rices_dir().join(&rice.id);
         if dest.exists() {
-            Self::pull(&dest)
+            Self::pull_with_progress(&dest, on_line)
         } else {
-            Self::clone(&rice.repo_url, &dest, &rice.id)
+            Self::clone_with_progress(&rice.repo_url, &dest, &rice.id, on_line)
         }
     }
 
-    fn clone(url: &str, dest: &Path, id: &str) -> Result<String> {
+    fn clone_with_progress<F>(url: &str, dest: &Path, id: &str, on_line: F) -> Result<String>
+    where
+        F: Fn(String) + Send + 'static,
+    {
         let mut child = Command::new("git")
             .args(["clone", "--depth=1", "--progress", url])
             .arg(dest)
             .env("GIT_TERMINAL_PROMPT", "0")
+            .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| RiceForgeError::Git(format!("git not found: {e}")))?;
+
+        if let Some(stderr) = child.stderr.take() {
+            std::thread::spawn(move || {
+                stream_git_output(stderr, on_line);
+            });
+        }
 
         Self::wait_with_timeout(&mut child, CLONE_TIMEOUT_SECS)
             .and_then(|ok| {
@@ -40,20 +60,32 @@ impl GitManager {
         Self::head_hash(dest)
     }
 
-    fn pull(dir: &Path) -> Result<String> {
+    fn pull_with_progress<F>(dir: &Path, on_line: F) -> Result<String>
+    where
+        F: Fn(String) + Send + 'static,
+    {
         let mut child = Command::new("git")
             .current_dir(dir)
-            .args(["pull", "--ff-only", "--quiet"])
+            .args(["pull", "--ff-only", "--progress"])
             .env("GIT_TERMINAL_PROMPT", "0")
+            .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| RiceForgeError::Git(format!("git not found: {e}")))?;
+
+        if let Some(stderr) = child.stderr.take() {
+            std::thread::spawn(move || {
+                stream_git_output(stderr, on_line);
+            });
+        }
 
         Self::wait_with_timeout(&mut child, PULL_TIMEOUT_SECS)
             .and_then(|ok| {
                 if ok {
                     Ok(())
                 } else {
-                    Err(RiceForgeError::Git("git pull failed — manual resolution needed".into()))
+                    Err(RiceForgeError::Git(
+                        "git pull failed — manual resolution needed".into(),
+                    ))
                 }
             })?;
 
@@ -102,5 +134,40 @@ impl GitManager {
             fs::remove_dir_all(dest)?;
         }
         Ok(())
+    }
+}
+
+/// Read git stderr byte-by-byte, splitting on `\r` and `\n` (git uses `\r`
+/// for progress lines that overwrite the terminal), and call `on_line` for
+/// every non-empty chunk.  Runs on a dedicated thread.
+fn stream_git_output<R, F>(mut reader: R, on_line: F)
+where
+    R: Read,
+    F: Fn(String),
+{
+    let mut buf = Vec::<u8>::with_capacity(256);
+    let mut byte = [0u8; 1];
+
+    while reader.read(&mut byte).ok() == Some(1) {
+        match byte[0] {
+            b'\n' | b'\r' => {
+                if !buf.is_empty() {
+                    let line = String::from_utf8_lossy(&buf).trim().to_string();
+                    if !line.is_empty() {
+                        on_line(line);
+                    }
+                    buf.clear();
+                }
+            }
+            b => buf.push(b),
+        }
+    }
+
+    // Flush any remaining content after EOF
+    if !buf.is_empty() {
+        let line = String::from_utf8_lossy(&buf).trim().to_string();
+        if !line.is_empty() {
+            on_line(line);
+        }
     }
 }
