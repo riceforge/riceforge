@@ -349,7 +349,7 @@ pub fn Detail(id: String) -> Element {
                                 if !prog.is_empty() {
                                     rsx! { div { class: "git-progress-line", "{prog}" } }
                                 } else {
-                                    None
+                                    rsx! {}
                                 }
                             }
                         }
