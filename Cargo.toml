@@ -1,0 +1,8 @@
+[workspace]
+resolver = "3"
+members = [
+    "rf-cli",
+    "rf-core",
+    "rf-gui",
+    "rf-index",
+]

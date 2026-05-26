@@ -1,0 +1,22 @@
+/target/
+** /target /
+Cargo.lock
+
+/rf-gui/dist/
+/rf-gui/.dioxus/
+node_modules/
+.tailwind/
+
+**/*.rs.bk
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+/index.json
+
+CLAUDE.md
+AGENTS.md
