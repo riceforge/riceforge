@@ -1,0 +1,40 @@
+# rice.toml — format reference for rice authors
+# Place this file at the root of your rice repository.
+
+# Required: unique identifier (alphanumeric, hyphens, underscores only)
+id = "catppuccin-hyprland"
+
+# Required: human-readable display name
+name = "Catppuccin Hyprland"
+
+# Required: your GitHub username or display name
+author = "yourname"
+
+# Required: 20-300 characters describing your rice
+description = "A clean Mocha-themed Hyprland setup with Waybar, Kitty and Rofi."
+
+# Required: window manager (hyprland, sway, i3, openbox, bspwm, qtile, xmonad)
+wm = "hyprland"
+
+# Required: color scheme or theme name
+theme = "catppuccin-mocha"
+
+# Optional: fonts used in this rice
+fonts = ["JetBrains Mono", "Noto Sans"]
+
+# Optional: pacman package names required for this rice
+dependencies = [
+    "hyprland",
+    "waybar",
+    "kitty",
+    "rofi",
+    "hyprpaper",
+]
+
+# Required: public GitHub repository URL (HTTPS)
+repo_url = "https://github.com/yourname/catppuccin-hyprland"
+
+# Optional: direct links to screenshots (preferably hosted on GitHub)
+screenshots = [
+    "https://raw.githubusercontent.com/yourname/catppuccin-hyprland/main/screenshots/preview.png",
+]

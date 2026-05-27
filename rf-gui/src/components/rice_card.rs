@@ -1,7 +1,8 @@
+use crate::Route;
 use dioxus::prelude::*;
 use rf_core::{Rice, WindowManager};
 
-fn wm_color(wm: &WindowManager) -> &'static str {
+pub fn wm_color(wm: &WindowManager) -> &'static str {
     match wm {
         WindowManager::Hyprland => "#a855f7",
         WindowManager::Sway => "#3b82f6",
@@ -14,7 +15,7 @@ fn wm_color(wm: &WindowManager) -> &'static str {
     }
 }
 
-fn thumbnail_gradient(wm: &WindowManager) -> &'static str {
+pub fn thumbnail_gradient(wm: &WindowManager) -> &'static str {
     match wm {
         WindowManager::Hyprland => "linear-gradient(135deg, #180d2e 0%, #2d1654 100%)",
         WindowManager::Sway => "linear-gradient(135deg, #0a1628 0%, #0e2a4a 100%)",
@@ -32,9 +33,12 @@ pub fn RiceCard(rice: Rice) -> Element {
     let color = wm_color(&rice.wm);
     let gradient = thumbnail_gradient(&rice.wm);
     let wm_label = rice.wm.to_string();
+    let id = rice.id.clone();
 
     rsx! {
-        div { class: "rice-card",
+        Link {
+            to: Route::Detail { id },
+            class: "rice-card",
             div {
                 class: "rice-thumbnail",
                 style: "background: {gradient}",
@@ -55,7 +59,7 @@ pub fn RiceCard(rice: Rice) -> Element {
                     div { class: "rice-tags",
                         span { class: "rice-tag", "{rice.theme}" }
                     }
-                    button { class: "install-btn", "Install" }
+                    span { class: "install-hint", "view →" }
                 }
             }
         }
