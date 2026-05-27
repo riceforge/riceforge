@@ -1,12 +1,12 @@
-#[cfg(unix)]
-use std::fs;
-use std::path::PathBuf;
-use walkdir::WalkDir;
 use crate::{
     config::Paths,
     error::{Result, RiceForgeError},
     models::{DeployPlan, Rice},
 };
+#[cfg(unix)]
+use std::fs;
+use std::path::PathBuf;
+use walkdir::WalkDir;
 
 const EXCLUDED_AT_ROOT: &[&str] = &[
     "rice.toml",

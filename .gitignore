@@ -20,3 +20,10 @@ node_modules/
 .claude/
 CLAUDE.md
 AGENTS.md
+AGENT_CONTEXT.md
+PROJECT_OVERVIEW.md
+LINUX_MIGRATION.md
+PROBLEMS.md
+
+#temporary solution, stupid reasons :)
+Cargo.lock

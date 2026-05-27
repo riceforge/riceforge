@@ -68,7 +68,9 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         Commands::Validate { path } => cmd_validate(&path),
         Commands::Build { directory, output } => cmd_build(&directory, &output),
-        Commands::UpdateStars { index_path, token } => cmd_update_stars(&index_path, token.as_deref()),
+        Commands::UpdateStars { index_path, token } => {
+            cmd_update_stars(&index_path, token.as_deref())
+        }
     }
 }
 
@@ -84,7 +86,11 @@ fn cmd_validate(path: &Path) -> anyhow::Result<()> {
     if rice.id.is_empty() || rice.id.contains(' ') {
         errors.push("id must be non-empty and contain no spaces".into());
     }
-    if !rice.id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if !rice
+        .id
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         errors.push("id must only contain alphanumeric characters, hyphens and underscores".into());
     }
     if rice.name.is_empty() {
@@ -156,7 +162,10 @@ fn cmd_build(dir: &Path, output: &Path) -> anyhow::Result<()> {
             name: raw.name,
             author: raw.author,
             description: raw.description,
-            wm: raw.wm.parse::<WindowManager>().unwrap_or(WindowManager::Unknown),
+            wm: raw
+                .wm
+                .parse::<WindowManager>()
+                .unwrap_or(WindowManager::Unknown),
             theme: raw.theme,
             fonts: raw.fonts,
             dependencies: raw.dependencies,
@@ -178,7 +187,11 @@ fn cmd_build(dir: &Path, output: &Path) -> anyhow::Result<()> {
 
     let json = serde_json::to_string_pretty(&index)?;
     fs::write(output, &json)?;
-    println!("✓ wrote {} rices to {}", index.rices.len(), output.display());
+    println!(
+        "✓ wrote {} rices to {}",
+        index.rices.len(),
+        output.display()
+    );
     Ok(())
 }
 
@@ -209,7 +222,13 @@ fn fetch_stars(repo_url: &str, token: Option<&str>) -> anyhow::Result<u32> {
         .replace("https://github.com/", "https://api.github.com/repos/");
 
     let mut cmd = Command::new("curl");
-    cmd.args(["-sf", "--connect-timeout", "10", "-H", "Accept: application/vnd.github+json"]);
+    cmd.args([
+        "-sf",
+        "--connect-timeout",
+        "10",
+        "-H",
+        "Accept: application/vnd.github+json",
+    ]);
     if let Some(t) = token {
         cmd.args(["-H", &format!("Authorization: Bearer {t}")]);
     }

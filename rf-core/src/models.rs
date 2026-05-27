@@ -115,14 +115,35 @@ mod tests {
     #[test]
     fn wm_from_str_case_insensitive() {
         use std::str::FromStr;
-        assert_eq!(WindowManager::from_str("Hyprland").unwrap(), WindowManager::Hyprland);
-        assert_eq!(WindowManager::from_str("SWAY").unwrap(), WindowManager::Sway);
+        assert_eq!(
+            WindowManager::from_str("Hyprland").unwrap(),
+            WindowManager::Hyprland
+        );
+        assert_eq!(
+            WindowManager::from_str("SWAY").unwrap(),
+            WindowManager::Sway
+        );
         assert_eq!(WindowManager::from_str("i3").unwrap(), WindowManager::I3);
-        assert_eq!(WindowManager::from_str("openbox").unwrap(), WindowManager::Openbox);
-        assert_eq!(WindowManager::from_str("bspwm").unwrap(), WindowManager::Bspwm);
-        assert_eq!(WindowManager::from_str("qtile").unwrap(), WindowManager::Qtile);
-        assert_eq!(WindowManager::from_str("xmonad").unwrap(), WindowManager::Xmonad);
-        assert_eq!(WindowManager::from_str("nope").unwrap(), WindowManager::Unknown);
+        assert_eq!(
+            WindowManager::from_str("openbox").unwrap(),
+            WindowManager::Openbox
+        );
+        assert_eq!(
+            WindowManager::from_str("bspwm").unwrap(),
+            WindowManager::Bspwm
+        );
+        assert_eq!(
+            WindowManager::from_str("qtile").unwrap(),
+            WindowManager::Qtile
+        );
+        assert_eq!(
+            WindowManager::from_str("xmonad").unwrap(),
+            WindowManager::Xmonad
+        );
+        assert_eq!(
+            WindowManager::from_str("nope").unwrap(),
+            WindowManager::Unknown
+        );
     }
 
     #[test]

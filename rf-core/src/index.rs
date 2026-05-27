@@ -1,9 +1,9 @@
-use std::{fs, process::Command};
 use crate::{
     config::Paths,
     error::{Result, RiceForgeError},
     models::{Index, Rice, WindowManager},
 };
+use std::{fs, process::Command};
 
 pub const INDEX_URL: &str =
     "https://raw.githubusercontent.com/riceforge/riceforge-index/main/index.json";
@@ -70,9 +70,8 @@ impl IndexManager {
                     || r.theme.to_lowercase().contains(&q);
 
                 let matches_wm = wm.is_none_or(|w| &r.wm == w);
-                let matches_theme = theme.is_none_or(|t| {
-                    r.theme.to_lowercase().contains(&t.to_lowercase())
-                });
+                let matches_theme =
+                    theme.is_none_or(|t| r.theme.to_lowercase().contains(&t.to_lowercase()));
 
                 matches_query && matches_wm && matches_theme
             })

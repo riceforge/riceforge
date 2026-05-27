@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use rf_core::{
+    WindowManager,
     backup::BackupManager,
     deploy::DeployManager,
     git::GitManager,
@@ -9,7 +10,6 @@ use rf_core::{
     installed::InstalledManager,
     packages::PackageManager,
     pipeline::{PipelineManager, PipelineWhen},
-    WindowManager,
 };
 use std::str::FromStr;
 
@@ -97,10 +97,16 @@ fn main() {
 fn run(cli: Cli) -> rf_core::Result<()> {
     match cli.command {
         Commands::Update => cmd_update(),
-        Commands::Search { query, wm, theme } => cmd_search(&query, wm.as_deref(), theme.as_deref()),
+        Commands::Search { query, wm, theme } => {
+            cmd_search(&query, wm.as_deref(), theme.as_deref())
+        }
         Commands::List { installed } => cmd_list(installed),
         Commands::Info { id } => cmd_info(&id),
-        Commands::Install { id, dry_run, no_packages } => cmd_install(&id, dry_run, no_packages),
+        Commands::Install {
+            id,
+            dry_run,
+            no_packages,
+        } => cmd_install(&id, dry_run, no_packages),
         Commands::Remove { id, restore, purge } => cmd_remove(&id, restore, purge),
         Commands::Backup { cmd } => match cmd {
             BackupCmd::List => cmd_backup_list(),
@@ -135,7 +141,11 @@ fn cmd_search(query: &str, wm: Option<&str>, theme: Option<&str>) -> rf_core::Re
 
     for rice in results {
         let installed = InstalledManager::is_installed(&rice.id)?;
-        let marker = if installed { "✓ ".green().to_string() } else { "  ".to_string() };
+        let marker = if installed {
+            "✓ ".green().to_string()
+        } else {
+            "  ".to_string()
+        };
         println!(
             "{}{}  {}  {}  ★{}",
             marker,
@@ -167,7 +177,11 @@ fn cmd_list(installed_only: bool) -> rf_core::Result<()> {
         let index = IndexManager::load_cached()?;
         for rice in &index.rices {
             let installed = InstalledManager::is_installed(&rice.id)?;
-            let marker = if installed { "✓".green() } else { " ".normal() };
+            let marker = if installed {
+                "✓".green()
+            } else {
+                " ".normal()
+            };
             println!(
                 "{} {}  {}  ★{}",
                 marker,
@@ -194,7 +208,14 @@ fn cmd_info(id: &str) -> rf_core::Result<()> {
     println!("  theme       {}", rice.theme);
     println!("  stars       {}", rice.stars);
     println!("  repo        {}", rice.repo_url.underline());
-    println!("  status      {}", if installed { "installed".green().to_string() } else { "not installed".dimmed().to_string() });
+    println!(
+        "  status      {}",
+        if installed {
+            "installed".green().to_string()
+        } else {
+            "not installed".dimmed().to_string()
+        }
+    );
     println!();
     println!("  {}", rice.description);
     if !rice.dependencies.is_empty() {
@@ -231,7 +252,11 @@ fn cmd_install(id: &str, dry_run: bool, no_packages: bool) -> rf_core::Result<()
 
     println!("\n{}", "deploy plan:".bold());
     for (src, dest) in &plan.links {
-        println!("  {} → {}", src.display().to_string().dimmed(), dest.display());
+        println!(
+            "  {} → {}",
+            src.display().to_string().dimmed(),
+            dest.display()
+        );
     }
 
     if !plan.to_backup.is_empty() {

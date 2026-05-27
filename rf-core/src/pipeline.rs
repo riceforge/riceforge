@@ -1,9 +1,9 @@
-use std::{fs, process::Command};
-use serde::Deserialize;
 use crate::{
     config::Paths,
     error::{Result, RiceForgeError},
 };
+use serde::Deserialize;
+use std::{fs, process::Command};
 
 #[derive(Debug, Deserialize)]
 pub struct Pipeline {
@@ -54,13 +54,14 @@ impl PipelineManager {
                 .arg(&step.run)
                 .current_dir(&work_dir)
                 .status()
-                .map_err(|e| RiceForgeError::Pipeline(format!(
-                    "step '{}' failed to launch: {e}", step.name
-                )))?;
+                .map_err(|e| {
+                    RiceForgeError::Pipeline(format!("step '{}' failed to launch: {e}", step.name))
+                })?;
 
             if !status.success() {
                 return Err(RiceForgeError::Pipeline(format!(
-                    "step '{}' exited with {status}", step.name
+                    "step '{}' exited with {status}",
+                    step.name
                 )));
             }
         }

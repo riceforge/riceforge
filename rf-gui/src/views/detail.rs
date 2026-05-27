@@ -1,14 +1,14 @@
-use crate::components::rice_card::{thumbnail_gradient, wm_color};
 use crate::Route;
+use crate::components::rice_card::{thumbnail_gradient, wm_color};
 use dioxus::prelude::*;
 use rf_core::{
+    DeployPlan, Rice,
     backup::BackupManager,
     deploy::DeployManager,
     git::GitManager,
     index::IndexManager,
     installed::InstalledManager,
     pipeline::{PipelineManager, PipelineWhen},
-    DeployPlan, Rice,
 };
 
 fn find_rice(id: &str) -> Option<Rice> {
@@ -84,9 +84,8 @@ pub fn Detail(id: String) -> Element {
 
     let rice = use_memo(move || find_rice(&id_rice));
 
-    let mut installed = use_signal(move || {
-        InstalledManager::is_installed(&id_installed).unwrap_or(false)
-    });
+    let mut installed =
+        use_signal(move || InstalledManager::is_installed(&id_installed).unwrap_or(false));
     let mut install_state: Signal<InstallState> = use_signal(|| InstallState::Idle);
     let mut remove_state: Signal<RemoveState> = use_signal(|| RemoveState::Idle);
 
@@ -107,8 +106,10 @@ pub fn Detail(id: String) -> Element {
             let wm_label = rice.wm.to_string();
             let install_cmd = format!("riceforge install {}", rice.id);
             let is_installed = installed();
-            let is_busy = matches!(install_state(), InstallState::Planning | InstallState::Applying)
-                || matches!(remove_state(), RemoveState::Removing);
+            let is_busy = matches!(
+                install_state(),
+                InstallState::Planning | InstallState::Applying
+            ) || matches!(remove_state(), RemoveState::Removing);
 
             let rice_for_plan = rice.clone();
             let rice_for_apply = rice.clone();

@@ -1,11 +1,11 @@
-use std::{fs, path::PathBuf};
-use chrono::Utc;
-use walkdir::WalkDir;
 use crate::{
     config::Paths,
     error::{Result, RiceForgeError},
     models::BackupEntry,
 };
+use chrono::Utc;
+use std::{fs, path::PathBuf};
+use walkdir::WalkDir;
 
 pub struct BackupManager;
 
@@ -24,12 +24,9 @@ impl BackupManager {
             if file.is_symlink() || !file.exists() {
                 continue;
             }
-            let relative = file
-                .strip_prefix(&config_base)
-                .map_err(|_| RiceForgeError::Backup(format!(
-                    "file is outside ~/.config: {}",
-                    file.display()
-                )))?;
+            let relative = file.strip_prefix(&config_base).map_err(|_| {
+                RiceForgeError::Backup(format!("file is outside ~/.config: {}", file.display()))
+            })?;
             let dest = backup_dir.join(relative);
             if let Some(parent) = dest.parent() {
                 fs::create_dir_all(parent)?;
