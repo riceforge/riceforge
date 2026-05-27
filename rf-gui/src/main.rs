@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use views::{Browse, Detail, Navbar};
+use views::{Browse, Detail, Installed, Navbar, Settings};
 
 mod components;
 mod views;
@@ -12,6 +12,10 @@ enum Route {
         Browse {},
         #[route("/rice/:id")]
         Detail { id: String },
+        #[route("/installed")]
+        Installed {},
+        #[route("/settings")]
+        Settings {},
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");

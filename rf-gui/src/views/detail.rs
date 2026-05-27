@@ -1,12 +1,80 @@
 use crate::components::rice_card::{thumbnail_gradient, wm_color};
 use crate::Route;
 use dioxus::prelude::*;
-use rf_core::{index::IndexManager, installed::InstalledManager, Rice};
+use rf_core::{
+    backup::BackupManager,
+    deploy::DeployManager,
+    git::GitManager,
+    index::IndexManager,
+    installed::InstalledManager,
+    pipeline::{PipelineManager, PipelineWhen},
+    DeployPlan, Rice,
+};
 
 fn find_rice(id: &str) -> Option<Rice> {
     IndexManager::load_cached()
         .ok()
         .and_then(|idx| IndexManager::find(&idx, id))
+}
+
+#[derive(Clone, PartialEq)]
+enum InstallState {
+    Idle,
+    Planning,
+    ConfirmPlan {
+        links: Vec<String>,
+        to_backup: Vec<String>,
+        has_pipeline: bool,
+    },
+    Applying,
+    Done(String),
+    Error(String),
+}
+
+#[derive(Clone, PartialEq)]
+enum RemoveState {
+    Idle,
+    Confirm,
+    Removing,
+    Done,
+    Error(String),
+}
+
+fn do_plan(rice: Rice) -> rf_core::Result<(DeployPlan, bool)> {
+    GitManager::clone_or_pull(&rice)?;
+    let plan = DeployManager::plan(&rice)?;
+    let has_pipeline = PipelineManager::load(&rice.id)?.is_some();
+    Ok((plan, has_pipeline))
+}
+
+fn do_apply(rice: Rice) -> rf_core::Result<String> {
+    let commit = GitManager::clone_or_pull(&rice)?;
+    let plan = DeployManager::plan(&rice)?;
+
+    let backup_id = if !plan.to_backup.is_empty() {
+        let entry = BackupManager::create(Some(&rice.id), &plan.to_backup)?;
+        Some(entry.id)
+    } else {
+        None
+    };
+
+    DeployManager::apply(&plan)?;
+    InstalledManager::add(&rice.id, &commit, backup_id)?;
+
+    if let Some(pipeline) = PipelineManager::load(&rice.id)? {
+        PipelineManager::run_steps(&pipeline, &PipelineWhen::Install, &rice.id)?;
+    }
+
+    Ok(commit)
+}
+
+fn do_remove(rice: Rice) -> rf_core::Result<()> {
+    if let Some(pipeline) = PipelineManager::load(&rice.id)? {
+        PipelineManager::run_steps(&pipeline, &PipelineWhen::Remove, &rice.id)?;
+    }
+    DeployManager::remove(&rice)?;
+    InstalledManager::remove(&rice.id)?;
+    Ok(())
 }
 
 #[component]
@@ -15,9 +83,12 @@ pub fn Detail(id: String) -> Element {
     let id_installed = id.clone();
 
     let rice = use_memo(move || find_rice(&id_rice));
-    let installed = use_memo(move || {
+
+    let mut installed = use_signal(move || {
         InstalledManager::is_installed(&id_installed).unwrap_or(false)
     });
+    let mut install_state: Signal<InstallState> = use_signal(|| InstallState::Idle);
+    let mut remove_state: Signal<RemoveState> = use_signal(|| RemoveState::Idle);
 
     match rice() {
         None => rsx! {
@@ -36,6 +107,12 @@ pub fn Detail(id: String) -> Element {
             let wm_label = rice.wm.to_string();
             let install_cmd = format!("riceforge install {}", rice.id);
             let is_installed = installed();
+            let is_busy = matches!(install_state(), InstallState::Planning | InstallState::Applying)
+                || matches!(remove_state(), RemoveState::Removing);
+
+            let rice_for_plan = rice.clone();
+            let rice_for_apply = rice.clone();
+            let rice_for_remove = rice.clone();
 
             rsx! {
                 div { class: "detail-page",
@@ -64,14 +141,189 @@ pub fn Detail(id: String) -> Element {
                                 span { class: "detail-stat", "{rice.theme}" }
                             }
                             p { class: "detail-description", "{rice.description}" }
+
                             div { class: "detail-actions",
                                 a {
                                     class: "btn-secondary",
                                     href: "{rice.repo_url}",
                                     "View on GitHub"
                                 }
+
+                                if !is_installed && !matches!(install_state(), InstallState::Done(_)) {
+                                    button {
+                                        class: "btn-primary",
+                                        disabled: is_busy,
+                                        onclick: move |_| {
+                                            let rice = rice_for_plan.clone();
+                                            spawn(async move {
+                                                install_state.set(InstallState::Planning);
+                                                let result = tokio::task::spawn_blocking(move || {
+                                                    do_plan(rice)
+                                                }).await;
+                                                match result {
+                                                    Ok(Ok((plan, has_pipeline))) => {
+                                                        let links = plan.links.iter().map(|(_, d)| {
+                                                            d.display().to_string()
+                                                        }).collect();
+                                                        let to_backup = plan.to_backup.iter().map(|p| {
+                                                            p.display().to_string()
+                                                        }).collect();
+                                                        install_state.set(InstallState::ConfirmPlan {
+                                                            links,
+                                                            to_backup,
+                                                            has_pipeline,
+                                                        });
+                                                    }
+                                                    Ok(Err(e)) => install_state.set(InstallState::Error(e.to_string())),
+                                                    Err(e) => install_state.set(InstallState::Error(e.to_string())),
+                                                }
+                                            });
+                                        },
+                                        if matches!(install_state(), InstallState::Planning) {
+                                            "Preparing…"
+                                        } else {
+                                            "Install"
+                                        }
+                                    }
+                                }
+
+                                if is_installed {
+                                    if matches!(remove_state(), RemoveState::Idle | RemoveState::Error(_)) {
+                                        button {
+                                            class: "btn-danger",
+                                            disabled: is_busy,
+                                            onclick: move |_| remove_state.set(RemoveState::Confirm),
+                                            "Remove"
+                                        }
+                                    }
+                                }
                             }
                         }
+                    }
+
+                    // Install plan confirmation
+                    if let InstallState::ConfirmPlan { links, to_backup, has_pipeline } = install_state() {
+                        div { class: "plan-box",
+                            h3 { class: "plan-title", "Deploy Plan" }
+                            p { class: "plan-desc", "{links.len()} symlink(s) will be created in your home directory." }
+
+                            if !to_backup.is_empty() {
+                                div { class: "plan-section",
+                                    p { class: "plan-section-label", "Files to back up first:" }
+                                    for f in &to_backup {
+                                        div { class: "plan-file plan-file--backup", "{f}" }
+                                    }
+                                }
+                            }
+
+                            div { class: "plan-section",
+                                p { class: "plan-section-label", "Symlinks to create:" }
+                                for dest in links.iter().take(12) {
+                                    div { class: "plan-file", "{dest}" }
+                                }
+                                if links.len() > 12 {
+                                    div { class: "plan-file plan-file--more",
+                                        "… and {links.len() - 12} more"
+                                    }
+                                }
+                            }
+
+                            if has_pipeline {
+                                p { class: "plan-pipeline-note", "This rice includes a pipeline.toml — post-install scripts will run." }
+                            }
+
+                            div { class: "plan-actions",
+                                button {
+                                    class: "btn-primary",
+                                    onclick: move |_| {
+                                        let rice = rice_for_apply.clone();
+                                        spawn(async move {
+                                            install_state.set(InstallState::Applying);
+                                            let result = tokio::task::spawn_blocking(move || {
+                                                do_apply(rice)
+                                            }).await;
+                                            match result {
+                                                Ok(Ok(commit)) => {
+                                                    installed.set(true);
+                                                    let short = commit.get(..8).unwrap_or(&commit).to_string();
+                                                    install_state.set(InstallState::Done(short));
+                                                }
+                                                Ok(Err(e)) => install_state.set(InstallState::Error(e.to_string())),
+                                                Err(e) => install_state.set(InstallState::Error(e.to_string())),
+                                            }
+                                        });
+                                    },
+                                    "Confirm Install"
+                                }
+                                button {
+                                    class: "btn-secondary",
+                                    onclick: move |_| install_state.set(InstallState::Idle),
+                                    "Cancel"
+                                }
+                            }
+                        }
+                    }
+
+                    if matches!(install_state(), InstallState::Applying) {
+                        div { class: "op-status op-status--running", "Installing… this may take a moment" }
+                    }
+
+                    if let InstallState::Done(hash) = install_state() {
+                        div { class: "op-status op-status--done", "Installed at commit {hash}" }
+                    }
+
+                    if let InstallState::Error(msg) = install_state() {
+                        div { class: "op-status op-status--error", "Error: {msg}" }
+                    }
+
+                    // Remove confirmation
+                    if matches!(remove_state(), RemoveState::Confirm) {
+                        div { class: "plan-box plan-box--danger",
+                            h3 { class: "plan-title", "Remove Rice" }
+                            p { class: "plan-desc",
+                                "All symlinks created by this rice will be removed. Your backup (if any) will be preserved."
+                            }
+                            div { class: "plan-actions",
+                                button {
+                                    class: "btn-danger",
+                                    onclick: move |_| {
+                                        let rice = rice_for_remove.clone();
+                                        spawn(async move {
+                                            remove_state.set(RemoveState::Removing);
+                                            let result = tokio::task::spawn_blocking(move || {
+                                                do_remove(rice)
+                                            }).await;
+                                            match result {
+                                                Ok(Ok(())) => {
+                                                    installed.set(false);
+                                                    remove_state.set(RemoveState::Done);
+                                                }
+                                                Ok(Err(e)) => remove_state.set(RemoveState::Error(e.to_string())),
+                                                Err(e) => remove_state.set(RemoveState::Error(e.to_string())),
+                                            }
+                                        });
+                                    },
+                                    "Confirm Remove"
+                                }
+                                button {
+                                    class: "btn-secondary",
+                                    onclick: move |_| remove_state.set(RemoveState::Idle),
+                                    "Cancel"
+                                }
+                            }
+                        }
+                    }
+
+                    if matches!(remove_state(), RemoveState::Removing) {
+                        div { class: "op-status op-status--running", "Removing…" }
+                    }
+
+                    if matches!(remove_state(), RemoveState::Done) {
+                        div { class: "op-status op-status--done", "Rice removed successfully." }
+                    }
+
+                    if let RemoveState::Error(msg) = remove_state() {
+                        div { class: "op-status op-status--error", "Error: {msg}" }
                     }
 
                     div { class: "detail-sections",
@@ -98,18 +350,9 @@ pub fn Detail(id: String) -> Element {
                         }
 
                         div { class: "detail-section",
-                            h3 { class: "section-title", "Install" }
+                            h3 { class: "section-title", "Install via CLI" }
                             div { class: "code-block",
                                 code { "{install_cmd}" }
-                            }
-                        }
-
-                        if is_installed {
-                            div { class: "detail-section",
-                                h3 { class: "section-title", "Remove" }
-                                div { class: "code-block",
-                                    code { "riceforge remove {rice.id}" }
-                                }
                             }
                         }
                     }
