@@ -128,7 +128,7 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
                         class: "btn-secondary btn-sm",
                         onclick: move |_| {
                             let id = rice_id_remove.clone();
-                            let on_removed = on_removed.clone();
+                            let on_removed = on_removed;
                             spawn(async move {
                                 op.set(RowOp::Removing);
                                 let result = tokio::task::spawn_blocking(move || do_remove(id)).await;
@@ -155,7 +155,7 @@ fn InstalledRow(entry: InstalledRice, on_removed: EventHandler<()>) -> Element {
                             class: "btn-danger btn-sm",
                             onclick: move |_| {
                                 let id = rice_id_purge.clone();
-                                let on_removed = on_removed.clone();
+                                let on_removed = on_removed;
                                 spawn(async move {
                                     op.set(RowOp::Removing);
                                     let result = tokio::task::spawn_blocking(move || do_purge(id)).await;
