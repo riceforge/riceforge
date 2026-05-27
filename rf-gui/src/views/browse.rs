@@ -23,7 +23,7 @@ fn mock_rices() -> Vec<Rice> {
             id: "nord-sway".into(),
             name: "Nord Sway".into(),
             author: "linuxbro".into(),
-            description: "Minimalist Nord-themed Sway setup. Swaybar, foot terminal and wofi launcher. Fully keyboard-driven.".into(),
+            description: "Minimalist Nord-themed Sway setup. Swaybar, foot terminal and wofi. Fully keyboard-driven.".into(),
             wm: WindowManager::Sway,
             theme: "nord".into(),
             fonts: vec!["Iosevka".into()],
@@ -38,7 +38,7 @@ fn mock_rices() -> Vec<Rice> {
             id: "gruvbox-i3".into(),
             name: "Gruvbox i3".into(),
             author: "ricemaster".into(),
-            description: "Classic Gruvbox i3 setup that stands the test of time. Polybar, urxvt and dmenu.".into(),
+            description: "Classic Gruvbox i3 setup. Polybar, urxvt and dmenu.".into(),
             wm: WindowManager::I3,
             theme: "gruvbox-dark".into(),
             fonts: vec!["Hack".into(), "Font Awesome".into()],
@@ -68,7 +68,7 @@ fn mock_rices() -> Vec<Rice> {
             id: "dracula-bspwm".into(),
             name: "Dracula bspwm".into(),
             author: "vampirice".into(),
-            description: "Dark Dracula theme for bspwm. Polybar with custom modules, picom blur and alacritty.".into(),
+            description: "Dracula theme for bspwm. Polybar, picom blur and alacritty.".into(),
             wm: WindowManager::Bspwm,
             theme: "dracula".into(),
             fonts: vec!["FiraCode Nerd Font".into()],
@@ -108,16 +108,14 @@ pub fn Browse() -> Element {
     let mut search = use_signal(|| String::new());
     let mut wm_filter: Signal<Option<String>> = use_signal(|| None);
 
-    let all_rices = use_resource(move || async { load_rices() });
+    let all_rices = use_memo(move || load_rices());
 
     let filtered = use_memo(move || {
-        let rices = all_rices.read();
-        let rices = rices.as_deref().unwrap_or(&[]);
         let q = search().to_lowercase();
         let wm = wm_filter();
 
-        rices
-            .iter()
+        all_rices()
+            .into_iter()
             .filter(|r| {
                 let matches_q = q.is_empty()
                     || r.name.to_lowercase().contains(&q)
@@ -131,11 +129,10 @@ pub fn Browse() -> Element {
 
                 matches_q && matches_wm
             })
-            .cloned()
             .collect::<Vec<_>>()
     });
 
-    let wm_options = [
+    let wm_options: &[(&str, Option<&str>)] = &[
         ("All", None),
         ("Hyprland", Some("hyprland")),
         ("Sway", Some("sway")),
@@ -159,10 +156,16 @@ pub fn Browse() -> Element {
                 }
             }
             div { class: "wm-filters",
-                for (label, value) in wm_options {
+                for &(label, value) in wm_options {
                     button {
-                        class: if wm_filter().as_deref() == value { "wm-chip wm-chip--active" } else { "wm-chip" },
-                        onclick: move |_| *wm_filter.write() = value.map(str::to_string),
+                        class: if wm_filter().as_deref() == value {
+                            "wm-chip wm-chip--active"
+                        } else {
+                            "wm-chip"
+                        },
+                        onclick: move |_| {
+                            *wm_filter.write() = value.map(|s| s.to_string());
+                        },
                         "{label}"
                     }
                 }

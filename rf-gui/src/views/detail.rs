@@ -3,45 +3,39 @@ use crate::Route;
 use dioxus::prelude::*;
 use rf_core::{index::IndexManager, installed::InstalledManager, Rice};
 
-fn load_rice(id: &str) -> Option<Rice> {
-    IndexManager::load_cached().ok()?.rices.into_iter().find(|r| r.id == id)
+fn find_rice(id: &str) -> Option<Rice> {
+    IndexManager::load_cached()
+        .ok()
+        .and_then(|idx| IndexManager::find(&idx, id))
 }
 
 #[component]
 pub fn Detail(id: String) -> Element {
-    let id_clone = id.clone();
-    let rice_res = use_resource(move || {
-        let id = id_clone.clone();
-        async move { load_rice(&id) }
+    let id_rice = id.clone();
+    let id_installed = id.clone();
+
+    let rice = use_memo(move || find_rice(&id_rice));
+    let installed = use_memo(move || {
+        InstalledManager::is_installed(&id_installed).unwrap_or(false)
     });
 
-    let id_for_installed = id.clone();
-    let installed_res = use_resource(move || {
-        let id = id_for_installed.clone();
-        async move { InstalledManager::is_installed(&id).unwrap_or(false) }
-    });
-
-    match rice_res.read().as_ref() {
+    match rice() {
         None => rsx! {
             div { class: "detail-page",
-                div { class: "detail-loading", "Loading..." }
-            }
-        },
-        Some(None) => rsx! {
-            div { class: "detail-page",
+                Link { to: Route::Browse {}, class: "back-link", "← Browse" }
                 div { class: "detail-not-found",
                     h2 { "Rice not found" }
                     p { "'{id}' does not exist in the index." }
-                    Link { to: Route::Browse {}, class: "back-link", "← Back to browse" }
+                    p { "Run " code { "riceforge update" } " to refresh the index." }
                 }
             }
         },
-        Some(Some(rice)) => {
-            let installed = installed_res.read().as_ref().copied().unwrap_or(false);
+        Some(rice) => {
             let color = wm_color(&rice.wm);
             let gradient = thumbnail_gradient(&rice.wm);
             let wm_label = rice.wm.to_string();
             let install_cmd = format!("riceforge install {}", rice.id);
+            let is_installed = installed();
 
             rsx! {
                 div { class: "detail-page",
@@ -60,7 +54,7 @@ pub fn Detail(id: String) -> Element {
                         div { class: "detail-meta",
                             div { class: "detail-header",
                                 h1 { class: "detail-name", "{rice.name}" }
-                                if installed {
+                                if is_installed {
                                     span { class: "installed-badge", "installed" }
                                 }
                             }
@@ -104,9 +98,18 @@ pub fn Detail(id: String) -> Element {
                         }
 
                         div { class: "detail-section",
-                            h3 { class: "section-title", "Install via CLI" }
+                            h3 { class: "section-title", "Install" }
                             div { class: "code-block",
                                 code { "{install_cmd}" }
+                            }
+                        }
+
+                        if is_installed {
+                            div { class: "detail-section",
+                                h3 { class: "section-title", "Remove" }
+                                div { class: "code-block",
+                                    code { "riceforge remove {rice.id}" }
+                                }
                             }
                         }
                     }
