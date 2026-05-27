@@ -6,3 +6,9 @@ members = [
     "rf-gui",
     "rf-index",
 ]
+
+[workspace.lints.rust]
+unused_imports = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
