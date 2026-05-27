@@ -1,6 +1,5 @@
 /target/
-** /target /
-Cargo.lock
+**/target/
 
 /rf-gui/dist/
 /rf-gui/.dioxus/
@@ -18,5 +17,6 @@ node_modules/
 
 /index.json
 
+.claude/
 CLAUDE.md
 AGENTS.md
