@@ -69,8 +69,8 @@ impl IndexManager {
                     || r.description.to_lowercase().contains(&q)
                     || r.theme.to_lowercase().contains(&q);
 
-                let matches_wm = wm.map_or(true, |w| &r.wm == w);
-                let matches_theme = theme.map_or(true, |t| {
+                let matches_wm = wm.is_none_or(|w| &r.wm == w);
+                let matches_theme = theme.is_none_or(|t| {
                     r.theme.to_lowercase().contains(&t.to_lowercase())
                 });
 
