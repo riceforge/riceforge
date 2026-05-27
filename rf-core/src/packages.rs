@@ -28,7 +28,6 @@ impl PackageManager {
             .collect()
     }
 
-    /// Install packages via sudo (CLI use — requires a terminal for password).
     pub fn install(packages: &[&str]) -> Result<()> {
         if packages.is_empty() {
             return Ok(());

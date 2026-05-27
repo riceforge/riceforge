@@ -44,7 +44,6 @@ pub fn RiceCard(rice: Rice) -> Element {
             div {
                 class: "rice-thumbnail",
                 style: "{thumb_bg}",
-                // Use <img> overlay for reliable WebKit rendering
                 if let Some(url) = screenshot {
                     img {
                         class: "rice-thumbnail-img",

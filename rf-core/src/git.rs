@@ -5,19 +5,17 @@ use crate::{
 };
 use std::{fs, io::Read, path::Path, process::Command, time::{Duration, Instant}};
 
-const CLONE_TIMEOUT_SECS: u64 = 300; // 5 min for large repos (HyDE ~500MB)
+const CLONE_TIMEOUT_SECS: u64 = 300;
 const PULL_TIMEOUT_SECS:  u64 = 120;
 
 pub struct GitManager;
 
 impl GitManager {
-    /// Clone or pull without progress reporting (used by CLI).
+
     pub fn clone_or_pull(rice: &Rice) -> Result<String> {
         Self::clone_or_pull_with_progress(rice, |_| {})
     }
 
-    /// Clone or pull, streaming each output line to `on_line`.
-    /// Used by the GUI to show live progress.
     pub fn clone_or_pull_with_progress<F>(rice: &Rice, on_line: F) -> Result<String>
     where
         F: Fn(String) + Send + 'static,
@@ -92,8 +90,7 @@ impl GitManager {
         Self::head_hash(dir)
     }
 
-    /// Wait for a child process with a timeout. Returns `Ok(true)` on success,
-    /// `Ok(false)` on non-zero exit, `Err` on timeout or I/O error.
+
     fn wait_with_timeout(child: &mut std::process::Child, secs: u64) -> Result<bool> {
         let deadline = Duration::from_secs(secs);
         let start = Instant::now();
@@ -137,9 +134,6 @@ impl GitManager {
     }
 }
 
-/// Read git stderr byte-by-byte, splitting on `\r` and `\n` (git uses `\r`
-/// for progress lines that overwrite the terminal), and call `on_line` for
-/// every non-empty chunk.  Runs on a dedicated thread.
 fn stream_git_output<R, F>(mut reader: R, on_line: F)
 where
     R: Read,
@@ -163,7 +157,6 @@ where
         }
     }
 
-    // Flush any remaining content after EOF
     if !buf.is_empty() {
         let line = String::from_utf8_lossy(&buf).trim().to_string();
         if !line.is_empty() {

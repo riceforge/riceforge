@@ -35,7 +35,6 @@ fn main() {
         .launch(App);
 }
 
-/// Global signal: number of installed rices. Updated by Detail on install/remove.
 pub type InstalledCount = Signal<usize>;
 
 #[component]

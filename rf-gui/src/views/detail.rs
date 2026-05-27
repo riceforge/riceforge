@@ -148,7 +148,6 @@ pub fn Detail(id: String) -> Element {
     let mut pkg_state: Signal<PkgState> = use_signal(|| PkgState::Idle);
     let mut installed_count: InstalledCount = use_context();
 
-    // Detect the current WM once; compute compat info eagerly as plain data
     let user_wm_name: Option<String> = rf_core::detect_wm().map(|w| w.to_string());
 
     match rice() {
@@ -173,7 +172,6 @@ pub fn Detail(id: String) -> Element {
                 InstallState::Planning | InstallState::Applying
             ) || matches!(remove_state(), RemoveState::Removing);
 
-            // Button label for the "Install Packages" button — computed reactively
             let pkg_btn_label = match pkg_state() {
                 PkgState::Idle => "Install Packages",
                 PkgState::Installing => "Installing…",
@@ -181,7 +179,6 @@ pub fn Detail(id: String) -> Element {
                 PkgState::Error(_) => "Retry",
             };
 
-            // WM compatibility: None = unknown WM, Some(true/false) = match/mismatch
             let rice_wm_str = rice.wm.to_string();
             let wm_compat: Option<bool> = user_wm_name
                 .as_deref()
@@ -191,7 +188,6 @@ pub fn Detail(id: String) -> Element {
             let rice_for_apply = rice.clone();
             let rice_for_remove = rice.clone();
 
-            // Hero thumbnail: use <img> overlay for reliable rendering
             let hero_bg = format!("background: {gradient};");
             let hero_img = rice.screenshots.first().cloned();
 
@@ -265,7 +261,6 @@ pub fn Detail(id: String) -> Element {
                                                     do_plan(rice_clone, tx)
                                                 });
 
-                                                // Poll progress while clone/pull runs
                                                 while !handle.is_finished() {
                                                     if let Ok(line) = rx.try_recv() {
                                                         git_progress.set(line);
@@ -274,7 +269,6 @@ pub fn Detail(id: String) -> Element {
                                                         std::time::Duration::from_millis(100)
                                                     ).await;
                                                 }
-                                                // Drain remaining messages
                                                 while let Ok(line) = rx.try_recv() {
                                                     git_progress.set(line);
                                                 }
@@ -323,7 +317,6 @@ pub fn Detail(id: String) -> Element {
                         }
                     }
 
-                    // Screenshots gallery (remaining screenshots after the first)
                     if rice.screenshots.len() > 1 {
                         div { class: "detail-screenshots",
                             for url in rice.screenshots.iter() {
