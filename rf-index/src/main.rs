@@ -121,7 +121,7 @@ fn cmd_validate(path: &Path) -> anyhow::Result<()> {
         for e in &errors {
             eprintln!("✗ {e}");
         }
-        return Err(anyhow::anyhow!("{} validation error(s)", errors.len()));
+        return Err(anyhow::anyhow!("{} validation errors", errors.len()));
     }
 
     Ok(())
