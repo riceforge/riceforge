@@ -12,6 +12,30 @@ use rf_core::{
     pipeline::{PipelineManager, PipelineWhen},
 };
 
+fn copy_to_clipboard(text: &str) {
+    use std::io::Write;
+    if let Ok(mut child) = std::process::Command::new("wl-copy")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    {
+        if let Some(stdin) = child.stdin.as_mut() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+        return;
+    }
+    if let Ok(mut child) = std::process::Command::new("xclip")
+        .args(["-selection", "clipboard"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    {
+        if let Some(stdin) = child.stdin.as_mut() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+    }
+}
+
 fn find_rice(id: &str) -> Option<Rice> {
     IndexManager::load_cached()
         .ok()
@@ -261,9 +285,9 @@ pub fn Detail(id: String) -> Element {
                                                     onclick: move |_| {
                                                         let cmd = cmd_for_copy.clone();
                                                         spawn(async move {
-                                                            eval(&format!(
-                                                                "navigator.clipboard.writeText(`{cmd}`).catch(()=>{{}})"
-                                                            )).await.ok();
+                                                            tokio::task::spawn_blocking(move || {
+                                                                copy_to_clipboard(&cmd);
+                                                            }).await.ok();
                                                         });
                                                     },
                                                     "Copy"
