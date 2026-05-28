@@ -13,16 +13,18 @@ mod unix {
         ENV_LOCK.get_or_init(|| Mutex::new(()))
     }
 
-    fn setup_xdg(tmp: &TempDir) {
+    unsafe fn setup_xdg(tmp: &TempDir) {
         let data = tmp.path().join("data");
         let cache = tmp.path().join("cache");
         fs::create_dir_all(&data).unwrap();
         fs::create_dir_all(&cache).unwrap();
-        std::env::set_var("XDG_DATA_HOME", &data);
-        std::env::set_var("XDG_CACHE_HOME", &cache);
+        unsafe {
+            std::env::set_var("XDG_DATA_HOME", &data);
+            std::env::set_var("XDG_CACHE_HOME", &cache);
+        }
     }
 
-    fn make_rice(id: &str) -> rf_core::Rice {
+    unsafe fn make_rice(id: &str) -> rf_core::Rice {
         use rf_core::{Rice, WindowManager};
         Rice {
             id: id.to_string(),
@@ -45,7 +47,7 @@ mod unix {
     fn installed_manager_add_list_remove() {
         let _guard = env_lock().lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        setup_xdg(&tmp);
+        unsafe { setup_xdg(&tmp); }
 
         use rf_core::installed::InstalledManager;
 
@@ -75,7 +77,7 @@ mod unix {
     fn installed_manager_add_overwrites_existing() {
         let _guard = env_lock().lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        setup_xdg(&tmp);
+        unsafe { setup_xdg(&tmp); }
 
         use rf_core::installed::InstalledManager;
 
@@ -91,7 +93,7 @@ mod unix {
     fn installed_manager_remove_nonexistent_returns_none() {
         let _guard = env_lock().lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        setup_xdg(&tmp);
+        unsafe { setup_xdg(&tmp); }
 
         use rf_core::installed::InstalledManager;
 
@@ -103,7 +105,7 @@ mod unix {
     fn backup_create_and_list() {
         let _guard = env_lock().lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        setup_xdg(&tmp);
+        unsafe { setup_xdg(&tmp); }
 
         use rf_core::backup::BackupManager;
 
@@ -113,7 +115,7 @@ mod unix {
         let file = config_dir.join("alacritty.toml");
         fs::write(&file, b"[colors]").unwrap();
 
-        std::env::set_var("HOME", &fake_home);
+        unsafe { std::env::set_var("HOME", &fake_home); }
 
         let entry = BackupManager::create(Some("rice-a"), &[file]).unwrap();
         assert_eq!(entry.rice_id.as_deref(), Some("rice-a"));
@@ -128,12 +130,12 @@ mod unix {
     fn backup_clean_removes_old_entries() {
         let _guard = env_lock().lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        setup_xdg(&tmp);
+        unsafe { setup_xdg(&tmp); }
 
         use rf_core::backup::BackupManager;
 
         let fake_home = tmp.path().join("home");
-        std::env::set_var("HOME", &fake_home);
+        unsafe { std::env::set_var("HOME", &fake_home); }
 
         BackupManager::create(None, &[]).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(1100));
@@ -152,11 +154,11 @@ mod unix {
     fn deploy_plan_excludes_root_files() {
         let _guard = env_lock().lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        setup_xdg(&tmp);
+        unsafe { setup_xdg(&tmp); }
 
         use rf_core::{config::Paths, deploy::DeployManager};
 
-        let rice = make_rice("plan-rice");
+        let rice = unsafe { make_rice("plan-rice") };
         let rice_dir = Paths::rices_dir().join(&rice.id);
         fs::create_dir_all(&rice_dir).unwrap();
 
@@ -170,7 +172,7 @@ mod unix {
 
         let fake_home = tmp.path().join("home");
         fs::create_dir_all(&fake_home).unwrap();
-        std::env::set_var("HOME", &fake_home);
+        unsafe { std::env::set_var("HOME", &fake_home); }
 
         let plan = DeployManager::plan(&rice).unwrap();
 
@@ -190,11 +192,11 @@ mod unix {
     fn deploy_apply_creates_symlinks() {
         let _guard = env_lock().lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        setup_xdg(&tmp);
+        unsafe { setup_xdg(&tmp); }
 
         use rf_core::{config::Paths, deploy::DeployManager};
 
-        let rice = make_rice("apply-rice");
+        let rice = unsafe { make_rice("apply-rice") };
         let rice_dir = Paths::rices_dir().join(&rice.id);
         let config_dir = rice_dir.join(".config").join("kitty");
         fs::create_dir_all(&config_dir).unwrap();
@@ -202,7 +204,7 @@ mod unix {
 
         let fake_home = tmp.path().join("home");
         fs::create_dir_all(&fake_home).unwrap();
-        std::env::set_var("HOME", &fake_home);
+        unsafe { std::env::set_var("HOME", &fake_home); }
 
         let plan = DeployManager::plan(&rice).unwrap();
         assert_eq!(plan.links.len(), 1);
@@ -218,11 +220,11 @@ mod unix {
     fn deploy_remove_deletes_symlinks() {
         let _guard = env_lock().lock().unwrap();
         let tmp = TempDir::new().unwrap();
-        setup_xdg(&tmp);
+        unsafe { setup_xdg(&tmp); }
 
         use rf_core::{config::Paths, deploy::DeployManager};
 
-        let rice = make_rice("remove-rice");
+        let rice = unsafe { make_rice("remove-rice") };
         let rice_dir = Paths::rices_dir().join(&rice.id);
         let config_dir = rice_dir.join(".config").join("wm");
         fs::create_dir_all(&config_dir).unwrap();
@@ -230,7 +232,7 @@ mod unix {
 
         let fake_home = tmp.path().join("home");
         fs::create_dir_all(&fake_home).unwrap();
-        std::env::set_var("HOME", &fake_home);
+        unsafe { std::env::set_var("HOME", &fake_home); }
 
         let plan = DeployManager::plan(&rice).unwrap();
         DeployManager::apply(&plan).unwrap();
