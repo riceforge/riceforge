@@ -13,10 +13,15 @@ pub fn Browse() -> Element {
     let mut search = use_signal(String::new);
     let mut wm_filter: Signal<Option<String>> = use_signal(|| None);
 
-    let load_result = use_memo(load_rices);
+    // Async load so the UI thread is never blocked and we can show skeletons
+    let load_result = use_resource(|| async move {
+        tokio::task::spawn_blocking(load_rices)
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()))
+    });
 
     let filtered = use_memo(move || {
-        let Ok(all) = load_result() else {
+        let Some(Ok(all)) = load_result.read().as_ref().cloned() else {
             return vec![];
         };
         let q = search().to_lowercase();
@@ -61,15 +66,38 @@ pub fn Browse() -> Element {
                 }
             }
 
-            match load_result() {
-                Err(_) => rsx! {
+            match load_result.read().as_ref() {
+                // Still loading — show skeleton cards
+                None => rsx! {
+                    div { class: "wm-filters skeleton-filters",
+                        for _ in 0..5 {
+                            div { class: "skeleton skeleton-chip" }
+                        }
+                    }
+                    div { class: "rice-grid",
+                        for _ in 0..8 {
+                            div { class: "rice-card skeleton-card",
+                                div { class: "skeleton rice-thumbnail" }
+                                div { class: "rice-info",
+                                    div { class: "skeleton skeleton-line skeleton-line--title" }
+                                    div { class: "skeleton skeleton-line skeleton-line--sub" }
+                                    div { class: "skeleton skeleton-line skeleton-line--desc" }
+                                    div { class: "skeleton skeleton-line skeleton-line--desc skeleton-line--short" }
+                                }
+                            }
+                        }
+                    }
+                },
+                // Index not available
+                Some(Err(_)) => rsx! {
                     div { class: "empty-state",
                         h3 { "Index not loaded" }
                         p { "Open Settings and click " strong { "Update Index" } " to fetch the rice registry." }
                         Link { to: Route::Settings {}, class: "btn-primary", "Go to Settings" }
                     }
                 },
-                Ok(_) => rsx! {
+                // Loaded OK
+                Some(Ok(_)) => rsx! {
                     div { class: "wm-filters",
                         for &(label, value) in wm_options {
                             button {

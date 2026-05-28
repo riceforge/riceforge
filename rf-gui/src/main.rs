@@ -37,8 +37,16 @@ fn main() {
         .launch(App);
 }
 
+/// Global signal: number of installed rices. Updated by Detail on install/remove.
+pub type InstalledCount = Signal<usize>;
+
 #[component]
 fn App() -> Element {
+    let initial = rf_core::installed::InstalledManager::list()
+        .map(|l| l.len())
+        .unwrap_or(0);
+    use_context_provider(|| Signal::new(initial));
+
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
