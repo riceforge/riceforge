@@ -31,9 +31,10 @@ enum Commands {
     #[command(about = "Sync local index cache from remote registry")]
     Update,
 
-    #[command(about = "Search available rices")]
+    #[command(about = "Search available rices (no query = show all)")]
     Search {
-        query: String,
+        #[arg(help = "Search query — omit to list everything")]
+        query: Option<String>,
         #[arg(long, short, value_name = "WM", help = "Filter by window manager")]
         wm: Option<String>,
         #[arg(long, short = 't', value_name = "THEME", help = "Filter by theme")]
@@ -118,7 +119,7 @@ fn run(cli: Cli) -> rf_core::Result<()> {
     match cli.command {
         Commands::Update => cmd_update(),
         Commands::Search { query, wm, theme } => {
-            cmd_search(&query, wm.as_deref(), theme.as_deref())
+            cmd_search(query.as_deref(), wm.as_deref(), theme.as_deref())
         }
         Commands::List { installed } => cmd_list(installed),
         Commands::Info { id } => cmd_info(&id),
@@ -156,10 +157,24 @@ fn cmd_update() -> rf_core::Result<()> {
     Ok(())
 }
 
-fn cmd_search(query: &str, wm: Option<&str>, theme: Option<&str>) -> rf_core::Result<()> {
+fn cmd_search(query: Option<&str>, wm: Option<&str>, theme: Option<&str>) -> rf_core::Result<()> {
     let index = IndexManager::load_cached()?;
     let wm_filter = wm.and_then(|w| WindowManager::from_str(w).ok());
-    let results = IndexManager::search(&index, query, wm_filter.as_ref(), theme);
+    let results = if let Some(q) = query {
+        IndexManager::search(&index, q, wm_filter.as_ref(), theme)
+    } else {
+        // No query — apply only WM/theme filters
+        index
+            .rices
+            .iter()
+            .filter(|r| {
+                let wm_ok = wm_filter.as_ref().is_none_or(|f| &r.wm == f);
+                let theme_ok = theme.is_none_or(|t| r.theme.to_lowercase().contains(t));
+                wm_ok && theme_ok
+            })
+            .cloned()
+            .collect()
+    };
 
     if results.is_empty() {
         println!("{}", "No rices found.".dimmed());
@@ -235,14 +250,21 @@ fn cmd_info(id: &str) -> rf_core::Result<()> {
     println!("  theme       {}", rice.theme);
     println!("  stars       {}", rice.stars);
     println!("  repo        {}", rice.repo_url.underline());
-    println!(
-        "  status      {}",
-        if installed {
-            "installed".green().to_string()
-        } else {
-            "not installed".dimmed().to_string()
+    if installed {
+        println!("  status      {}", "installed".green());
+        if let Ok(entry) = InstalledManager::get(id) {
+            println!(
+                "  commit      {}",
+                entry.commit_hash.get(..8).unwrap_or(&entry.commit_hash).dimmed()
+            );
+            println!(
+                "  installed   {}",
+                entry.installed_at.format("%Y-%m-%d %H:%M UTC").to_string().dimmed()
+            );
         }
-    );
+    } else {
+        println!("  status      {}", "not installed".dimmed());
+    }
     println!();
     println!("  {}", rice.description);
     if !rice.dependencies.is_empty() {
