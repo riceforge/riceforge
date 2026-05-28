@@ -171,10 +171,8 @@ fn cmd_build(dir: &Path, output: &Path, base_url: Option<&str>) -> anyhow::Resul
             }
         };
 
-        // Merge explicit screenshots from rice.toml with auto-discovered
-        // images from the rice's screenshots/ subdirectory (if any).
         let mut screenshots = raw.screenshots;
-        if let (Some(ref rice_dir), Some(base)) = (&rice_dir, base_url) {
+        if let (Some(rice_dir), Some(base)) = (&rice_dir, base_url) {
             let shots_dir = rice_dir.join("screenshots");
             if shots_dir.is_dir() {
                 let mut found: Vec<String> = fs::read_dir(&shots_dir)?
@@ -188,7 +186,6 @@ fn cmd_build(dir: &Path, output: &Path, base_url: Option<&str>) -> anyhow::Resul
                         })
                     })
                     .filter_map(|e| {
-                        // Build a raw GitHub URL relative to base_url
                         let rel = e
                             .path()
                             .strip_prefix(dir.parent().unwrap_or(dir))
@@ -199,7 +196,6 @@ fn cmd_build(dir: &Path, output: &Path, base_url: Option<&str>) -> anyhow::Resul
                     })
                     .collect();
                 found.sort();
-                // Prepend local screenshots so they appear first
                 found.extend(screenshots.drain(..));
                 screenshots = found;
             }
