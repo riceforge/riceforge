@@ -1,3 +1,4 @@
+//страшна
 #[cfg(unix)]
 mod unix {
     use std::{
