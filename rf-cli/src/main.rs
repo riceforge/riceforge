@@ -172,7 +172,6 @@ fn cmd_search(query: Option<&str>, wm: Option<&str>, theme: Option<&str>) -> rf_
                 let theme_ok = theme.is_none_or(|t| r.theme.to_lowercase().contains(t));
                 wm_ok && theme_ok
             })
-            .cloned()
             .collect()
     };
 
