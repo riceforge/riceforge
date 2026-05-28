@@ -40,7 +40,7 @@ jobs:
             libpango1.0-dev
 
       - name: Build CLI
-        run: cargo build --release -p riceforge
+        run: cargo build --release -p rf-cli
 
       - name: Build index tool
         run: cargo build --release -p rf-index
@@ -58,8 +58,11 @@ jobs:
           sha256sum "dist/riceforge-${TAG}-linux-x86_64.tar.gz" \
             > "dist/riceforge-${TAG}-linux-x86_64.tar.gz.sha256"
 
+          mkdir -p dist/gui-pkg
+          cp target/release/rf-gui dist/gui-pkg/
+          cp rf-gui/assets/riceforge.desktop dist/gui-pkg/
           tar czf "dist/rf-gui-${TAG}-linux-x86_64.tar.gz" \
-            -C target/release rf-gui
+            -C dist/gui-pkg rf-gui riceforge.desktop
           sha256sum "dist/rf-gui-${TAG}-linux-x86_64.tar.gz" \
             > "dist/rf-gui-${TAG}-linux-x86_64.tar.gz.sha256"
 

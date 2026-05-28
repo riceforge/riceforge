@@ -1,5 +1,5 @@
 [package]
-name = "riceforge"
+name = "rf-cli"
 version = "0.1.0"
 edition = "2024"
 description = "Dotfile rice manager for Linux"
@@ -11,5 +11,6 @@ path = "src/main.rs"
 [dependencies]
 rf-core = { path = "../rf-core" }
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 colored = "2"
 indicatif = "0.17"

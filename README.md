@@ -1,73 +1,127 @@
 # RiceForge
 
-A decentralized app store for Linux dotfile configurations (rices). Browse, install, and manage window manager setups — Hyprland, Sway, i3, bspwm, and more.
+[![CI](https://github.com/riceforge/riceforge/actions/workflows/ci.yml/badge.svg)](https://github.com/riceforge/riceforge/actions/workflows/ci.yml)
 
-## Features
+Децентрализованный менеджер dotfiles для Linux. Находите, устанавливайте и управляйте конфигурациями оконных менеджеров — Hyprland, Sway, i3, bspwm и других — прямо с терминала или через GUI.
 
-- **Serverless registry** — index lives in GitHub, no backend needed
-- **CLI and GUI** — full-featured terminal interface + native desktop app (Dioxus)
-- **Stow-style deployment** — symlinks from cloned repos into `~`, clean removal
-- **Automatic backups** — backs up existing configs before deploying
-- **Pipeline support** — optional `pipeline.toml` for post-install scripts
-- **Package resolution** — detects and installs missing pacman packages
-- **Zero telemetry** — no tracking, no accounts, no forced registration
+## Возможности
 
-## Installation
+- **Serverless-реестр** — индекс хранится на GitHub, без собственного сервера
+- **CLI и GUI** — полноценный терминальный интерфейс и нативное desktop-приложение (Dioxus)
+- **Stow-развёртывание** — симлинки из клонированного репо в `~`, чистое удаление
+- **Автоматические бэкапы** — существующие конфиги сохраняются перед установкой
+- **Pipeline-скрипты** — опциональный `pipeline.toml` для пост-установочных команд
+- **Разрешение зависимостей** — определяет и предлагает установить недостающие пакеты
+- **Без телеметрии** — никакого трекинга, аккаунтов или обязательной регистрации
 
-### Arch Linux / CachyOS
+## Архитектура
 
-**CLI only:**
+```
+riceforge/riceforge          — основное приложение (этот репозиторий)
+riceforge/riceforge-index    — реестр: rice.toml файлы + index.json
+github.com/*/dotfiles        — dotfiles-репозитории авторов (внешние)
+```
+
+```
+rf-core    — бизнес-логика (git, deploy, backup, packages, pipeline)
+rf-cli     — CLI-бинарник (riceforge)
+rf-gui     — desktop-интерфейс (Dioxus 0.7 + WebKit)
+rf-index   — сборщик и валидатор реестра (GitHub Actions)
+```
+
+Как это работает:
+
+1. Автор публикует dotfiles на GitHub, открывает PR в `riceforge-index` с `rice.toml`
+2. CI автоматически валидирует метаданные, после мёржа пересобирает `index.json`
+3. Пользователь: `riceforge update` → `riceforge install <id>` → конфиги на месте
+
+## Установка
+
+### Из бинарного релиза (рекомендуется)
+
+Открыть страницу [releases](https://github.com/riceforge/riceforge/releases/latest) и скачать нужный архив.
+
+**CLI:**
 
 ```bash
+wget https://github.com/riceforge/riceforge/releases/latest/download/riceforge-v0.1.0-linux-x86_64.tar.gz
+tar xzf riceforge-v0.1.0-linux-x86_64.tar.gz
+sudo install -Dm755 riceforge /usr/local/bin/riceforge
+sudo install -Dm755 rf-index  /usr/local/bin/rf-index
+```
+
+**GUI:**
+
+```bash
+# Сначала установить системные зависимости
+sudo pacman -S --needed webkit2gtk-4.1 gtk3
+
+wget https://github.com/riceforge/riceforge/releases/latest/download/rf-gui-v0.1.0-linux-x86_64.tar.gz
+tar xzf rf-gui-v0.1.0-linux-x86_64.tar.gz
+sudo install -Dm755 rf-gui /usr/local/bin/rf-gui
+```
+
+### Сборка из исходников
+
+```bash
+# Зависимости
+sudo pacman -S --needed rust git
+
 git clone https://github.com/riceforge/riceforge
 cd riceforge
-cargo build --release -p riceforge
+
+# CLI
+cargo build --release -p rf-cli
 sudo install -Dm755 target/release/riceforge /usr/local/bin/riceforge
-riceforge update
-```
 
-**GUI (requires webkit2gtk):**
-
-```bash
-sudo pacman -S --needed webkit2gtk-4.1 gtk3 libsoup3
+# GUI (требует webkit2gtk-4.1)
+sudo pacman -S --needed webkit2gtk-4.1 gtk3
 cargo build --release -p rf-gui
-./target/release/rf-gui
+sudo install -Dm755 target/release/rf-gui /usr/local/bin/rf-gui
 ```
 
-On Wayland/Hyprland the window is borderless by default — drag it with `Super+drag`.
-
-## CLI Usage
+## Использование CLI
 
 ```bash
-riceforge update                        # fetch/refresh the index
-riceforge search <query> [--wm hyprland] [--theme nord]
-riceforge list [--installed]
-riceforge info <rice-id>
-riceforge install <rice-id> [--dry-run] [--no-packages]
-riceforge remove <rice-id> [--restore] [--purge]
-riceforge backup list
-riceforge backup restore <id>
-riceforge backup clean [N]              # keep N most recent (default 5)
+riceforge update                              # обновить локальный кэш реестра
+riceforge list                                # список всех доступных rice
+riceforge list --installed                    # только установленные
+riceforge search <запрос>                     # поиск по названию/автору
+riceforge search <запрос> --wm hyprland       # с фильтром по WM
+riceforge info <id>                           # подробная информация
+riceforge install <id>                        # установить rice
+riceforge install <id> --dry-run              # предварительный просмотр без изменений
+riceforge install <id> --no-packages          # без авто-установки пакетов
+riceforge install <id> --force                # переустановить поверх существующего
+riceforge upgrade <id>                        # обновить до последнего коммита
+riceforge upgrade --all                       # обновить все установленные
+riceforge remove <id>                         # удалить симлинки
+riceforge remove <id> --restore               # удалить + восстановить бэкап
+riceforge remove <id> --purge                 # удалить + удалить клонированный репо
+riceforge check                               # проверить целостность симлинков
+riceforge backup list                         # список бэкапов
+riceforge backup restore <id>                 # восстановить бэкап
+riceforge backup clean [N]                    # удалить старые (оставить N последних)
 ```
 
-## Rice format
+## Формат rice.toml
 
-Each rice is a GitHub repository with a `rice.toml` at the root:
+Каждый rice — это GitHub-репозиторий с метаданными в `riceforge-index`. Метаданные описываются файлом `rice.toml`:
 
 ```toml
-id          = "catppuccin-hyprland"
-name        = "Catppuccin Hyprland"
-author      = "notashelf"
-description = "Mocha-themed Hyprland setup with Waybar and Kitty."
-wm          = "hyprland"
-theme       = "catppuccin-mocha"
-fonts       = ["JetBrains Mono", "Noto Sans"]
-dependencies = ["hyprland", "waybar", "kitty", "rofi"]
-repo_url    = "https://github.com/notashelf/catppuccin-hyprland"
-screenshots = ["screenshots/preview.png"]
+id           = "my-hyprland"
+name         = "My Hyprland"
+author       = "username"
+description  = "Краткое описание (20–300 символов)."
+wm           = "hyprland"           # hyprland | sway | i3 | bspwm | qtile | xmonad | openbox
+theme        = "catppuccin-mocha"
+fonts        = ["JetBrains Mono Nerd Font"]
+dependencies = ["hyprland", "waybar", "kitty"]
+repo_url     = "https://github.com/username/dotfiles"
+screenshots  = ["https://raw.githubusercontent.com/username/dotfiles/main/preview.png"]
 ```
 
-Optional `pipeline.toml` for post-install/pre-remove scripts:
+Опциональный `pipeline.toml` в dotfiles-репозитории для пост-установочных/пре-удаления скриптов:
 
 ```toml
 [[steps]]
@@ -76,39 +130,36 @@ run  = "systemctl --user enable --now waybar.service"
 when = "install"   # install | remove | always
 ```
 
-## How it works
+## Добавление своего rice
 
-1. `riceforge update` downloads `index.json` from the registry and caches it at `~/.cache/riceforge/`
-2. `riceforge install <id>` clones the rice repo to `~/.local/share/riceforge/rices/<id>/`
-3. Files are symlinked from the repo into `~` (Stow strategy)
-4. Existing configs are backed up to `~/.local/share/riceforge/backups/`
-5. `riceforge remove <id>` removes symlinks; `--restore` restores the backup
+1. Создайте публичный GitHub-репозиторий с dotfiles
+2. Откройте PR в [riceforge/riceforge-index](https://github.com/riceforge/riceforge-index) с файлом `rice.toml`
+3. CI автоматически проверит метаданные — при успехе PR можно мёржить
 
-## Submitting a rice
-
-1. Create a public GitHub repository with your dotfiles
-2. Add `rice.toml` to the root (see [examples/rice.toml](examples/rice.toml))
-3. Open a PR to [riceforge/riceforge-index](https://github.com/riceforge/riceforge-index)
-
-## Architecture
+## Структура данных
 
 ```
-rf-core    — business logic (git, deploy, backup, packages, pipeline)
-rf-cli     — CLI binary (riceforge)
-rf-gui     — desktop GUI (Dioxus 0.7)
-rf-index   — index builder/validator (GitHub Actions)
+~/.cache/riceforge/
+└── index.json                    # кэш реестра
+
+~/.local/share/riceforge/
+├── installed.json                # база установленных rice
+├── rices/
+│   └── <rice-id>/               # клонированный dotfiles-репозиторий
+└── backups/
+    └── <timestamp>/             # снапшот ~/.config до установки
 ```
 
-## Development
+## Разработка
 
 ```bash
-./scripts/build.sh     # release build
-./scripts/test.sh      # run all tests
-./scripts/dev.sh       # watch mode
+./scripts/build.sh    # сборка релизных бинарников
+./scripts/test.sh     # все тесты
+./scripts/dev.sh      # watch-режим (cargo watch)
 ```
 
-Requires Rust stable (1.80+). On Arch: `sudo pacman -S rust`.
+Требования: Rust stable 1.80+. На Arch: `sudo pacman -S rust`.
 
-## License
+## Лицензия
 
-MIT
+[MIT](LICENSE)

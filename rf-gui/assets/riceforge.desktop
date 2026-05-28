@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=RiceForge
+Comment=Dotfile rice manager for Linux
+Exec=rf-gui
+Icon=riceforge
+Terminal=false
+Type=Application
+Categories=Utility;System;
+Keywords=dotfiles;rice;hyprland;linux;config;
+StartupWMClass=rf-gui

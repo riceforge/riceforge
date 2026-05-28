@@ -661,6 +661,11 @@ a.rice-card {
     border-color: var(--border);
 }
 
+.btn-ghost.copied {
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.3);
+}
+
 .btn-sm {
     padding: 5px 12px;
     font-size: 12px;

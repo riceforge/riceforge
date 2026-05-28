@@ -19,7 +19,7 @@ impl GitManager {
 
     fn clone(url: &str, dest: &Path, id: &str) -> Result<String> {
         let status = Command::new("git")
-            .args(["clone", "--depth=1", url])
+            .args(["clone", "--depth=1", "--progress", url])
             .arg(dest)
             .status()
             .map_err(|e| RiceForgeError::Git(format!("git not found: {e}")))?;
