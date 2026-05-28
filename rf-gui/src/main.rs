@@ -1,5 +1,4 @@
 use dioxus::desktop::{Config, WindowBuilder};
-use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::prelude::*;
 use views::{Browse, Detail, Installed, Navbar, Settings};
 
@@ -30,8 +29,7 @@ fn main() {
             Config::default().with_window(
                 WindowBuilder::new()
                     .with_decorations(false)
-                    .with_title(concat!("RiceForge v", env!("CARGO_PKG_VERSION")))
-                    .with_min_inner_size(LogicalSize::new(900.0_f64, 600.0_f64)),
+                    .with_title(concat!("RiceForge v", env!("CARGO_PKG_VERSION"))),
             ),
         )
         .launch(App);

@@ -34,14 +34,8 @@ pub fn RiceCard(rice: Rice) -> Element {
     let gradient = thumbnail_gradient(&rice.wm);
     let wm_label = rice.wm.to_string();
     let id = rice.id.clone();
-
-    let thumb_style = if let Some(url) = rice.screenshots.first() {
-        format!(
-            "background: {gradient}; background-image: url('{url}'); background-size: cover; background-position: center;"
-        )
-    } else {
-        format!("background: {gradient};")
-    };
+    let thumb_bg = format!("background: {gradient};");
+    let screenshot = rice.screenshots.first().cloned();
 
     rsx! {
         Link {
@@ -49,7 +43,16 @@ pub fn RiceCard(rice: Rice) -> Element {
             class: "rice-card",
             div {
                 class: "rice-thumbnail",
-                style: "{thumb_style}",
+                style: "{thumb_bg}",
+                // Use <img> overlay for reliable WebKit rendering
+                if let Some(url) = screenshot {
+                    img {
+                        class: "rice-thumbnail-img",
+                        src: url,
+                        loading: "lazy",
+                        alt: "",
+                    }
+                }
                 div {
                     class: "rice-wm-badge",
                     style: "color: {color}; border-color: {color}",

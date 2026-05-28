@@ -28,6 +28,7 @@ impl PackageManager {
             .collect()
     }
 
+    /// Install packages via sudo (CLI use — requires a terminal for password).
     pub fn install(packages: &[&str]) -> Result<()> {
         if packages.is_empty() {
             return Ok(());
@@ -42,6 +43,33 @@ impl PackageManager {
         if !status.success() {
             return Err(RiceForgeError::PackageManager(format!(
                 "pacman failed for: {}",
+                packages.join(", ")
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Install packages via pkexec (GUI use — shows a PolicyKit graphical auth dialog).
+    /// Requires a polkit agent to be running (e.g. hyprpolkitagent, lxpolkit).
+    pub fn install_gui(packages: &[String]) -> Result<()> {
+        if packages.is_empty() {
+            return Ok(());
+        }
+
+        let status = Command::new("pkexec")
+            .args(["pacman", "-S", "--needed", "--noconfirm"])
+            .args(packages)
+            .status()
+            .map_err(|e| {
+                RiceForgeError::PackageManager(format!(
+                    "pkexec not found — is polkit installed? ({e})"
+                ))
+            })?;
+
+        if !status.success() {
+            return Err(RiceForgeError::PackageManager(format!(
+                "pkexec pacman failed for: {}",
                 packages.join(", ")
             )));
         }

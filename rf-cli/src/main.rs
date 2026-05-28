@@ -163,7 +163,6 @@ fn cmd_search(query: Option<&str>, wm: Option<&str>, theme: Option<&str>) -> rf_
     let results = if let Some(q) = query {
         IndexManager::search(&index, q, wm_filter.as_ref(), theme)
     } else {
-        // No query — apply only WM/theme filters
         index
             .rices
             .iter()
@@ -381,7 +380,6 @@ fn cmd_install(id: &str, dry_run: bool, no_packages: bool, force: bool) -> rf_co
         println!("{} pipeline steps completed", "✓".green());
     }
 
-    // Keep only the last 5 backups to avoid clutter
     let _ = BackupManager::clean(5);
 
     println!("{} {} installed", "✓".green(), rice.name.bold());
@@ -516,7 +514,6 @@ fn cmd_check() -> rf_core::Result<()> {
         let mut broken = Vec::new();
         for (src, dest) in &plan.links {
             if dest.is_symlink() {
-                // Check the symlink actually points to src
                 if let Ok(target) = std::fs::read_link(dest) {
                     if target != *src {
                         broken.push(dest.display().to_string());

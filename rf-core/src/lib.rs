@@ -8,6 +8,8 @@ pub mod installed;
 pub mod models;
 pub mod packages;
 pub mod pipeline;
+pub mod system;
 
 pub use error::{Result, RiceForgeError};
 pub use models::{BackupEntry, DeployPlan, Index, InstalledRice, Rice, WindowManager};
+pub use system::detect_wm;

@@ -29,6 +29,8 @@ enum Commands {
         directory: PathBuf,
         #[arg(long, short, default_value = "index.json")]
         output: PathBuf,
+        #[arg(long)]
+        base_url: Option<String>,
     },
 
     #[command(about = "Update star counts in an existing index.json")]
@@ -67,7 +69,9 @@ fn main() {
 fn run(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         Commands::Validate { path } => cmd_validate(&path),
-        Commands::Build { directory, output } => cmd_build(&directory, &output),
+        Commands::Build { directory, output, base_url } => {
+            cmd_build(&directory, &output, base_url.as_deref())
+        }
         Commands::UpdateStars { index_path, token } => {
             cmd_update_stars(&index_path, token.as_deref())
         }
@@ -108,8 +112,18 @@ fn cmd_validate(path: &Path) -> anyhow::Result<()> {
     if !rice.repo_url.starts_with("https://github.com/") {
         errors.push("repo_url must be a GitHub HTTPS URL".into());
     }
+    const ALLOWED_WMS: &[&str] = &[
+        "hyprland", "sway", "i3", "bspwm", "qtile", "xmonad", "openbox",
+    ];
+    let wm_lower = rice.wm.to_lowercase();
     if rice.wm.is_empty() {
         errors.push("wm is required".into());
+    } else if !ALLOWED_WMS.contains(&wm_lower.as_str()) {
+        errors.push(format!(
+            "wm '{}' is not allowed; valid values: {}",
+            rice.wm,
+            ALLOWED_WMS.join(", ")
+        ));
     }
     if rice.theme.is_empty() {
         errors.push("theme is required".into());
@@ -127,7 +141,7 @@ fn cmd_validate(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_build(dir: &Path, output: &Path) -> anyhow::Result<()> {
+fn cmd_build(dir: &Path, output: &Path, base_url: Option<&str>) -> anyhow::Result<()> {
     if !dir.is_dir() {
         return Err(anyhow::anyhow!("{} is not a directory", dir.display()));
     }
@@ -136,10 +150,10 @@ fn cmd_build(dir: &Path, output: &Path) -> anyhow::Result<()> {
 
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
-        let toml_path = if path.is_dir() {
-            path.join("rice.toml")
+        let (toml_path, rice_dir) = if path.is_dir() {
+            (path.join("rice.toml"), Some(path.clone()))
         } else if path.extension().is_some_and(|e| e == "toml") {
-            path.clone()
+            (path.clone(), None)
         } else {
             continue;
         };
@@ -157,6 +171,40 @@ fn cmd_build(dir: &Path, output: &Path) -> anyhow::Result<()> {
             }
         };
 
+        // Merge explicit screenshots from rice.toml with auto-discovered
+        // images from the rice's screenshots/ subdirectory (if any).
+        let mut screenshots = raw.screenshots;
+        if let (Some(ref rice_dir), Some(base)) = (&rice_dir, base_url) {
+            let shots_dir = rice_dir.join("screenshots");
+            if shots_dir.is_dir() {
+                let mut found: Vec<String> = fs::read_dir(&shots_dir)?
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.path().extension().is_some_and(|ext| {
+                            matches!(
+                                ext.to_str().unwrap_or("").to_lowercase().as_str(),
+                                "png" | "jpg" | "jpeg" | "webp" | "gif"
+                            )
+                        })
+                    })
+                    .filter_map(|e| {
+                        // Build a raw GitHub URL relative to base_url
+                        let rel = e
+                            .path()
+                            .strip_prefix(dir.parent().unwrap_or(dir))
+                            .ok()?
+                            .to_str()?
+                            .replace('\\', "/");
+                        Some(format!("{base}/{rel}"))
+                    })
+                    .collect();
+                found.sort();
+                // Prepend local screenshots so they appear first
+                found.extend(screenshots.drain(..));
+                screenshots = found;
+            }
+        }
+
         rices.push(Rice {
             id: raw.id,
             name: raw.name,
@@ -170,7 +218,7 @@ fn cmd_build(dir: &Path, output: &Path) -> anyhow::Result<()> {
             fonts: raw.fonts,
             dependencies: raw.dependencies,
             repo_url: raw.repo_url,
-            screenshots: raw.screenshots,
+            screenshots,
             stars: 0,
             commit_hash: None,
             updated_at: None,
