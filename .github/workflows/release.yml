@@ -27,20 +27,41 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libglib2.0-dev \
+            libcairo2-dev \
+            libpango1.0-dev
+
       - name: Build CLI
         run: cargo build --release -p riceforge
 
       - name: Build index tool
         run: cargo build --release -p rf-index
 
+      - name: Build GUI
+        run: cargo build --release -p rf-gui
+
       - name: Package
         run: |
           TAG="${GITHUB_REF_NAME}"
           mkdir -p dist
+
           tar czf "dist/riceforge-${TAG}-linux-x86_64.tar.gz" \
             -C target/release riceforge rf-index
           sha256sum "dist/riceforge-${TAG}-linux-x86_64.tar.gz" \
             > "dist/riceforge-${TAG}-linux-x86_64.tar.gz.sha256"
+
+          tar czf "dist/rf-gui-${TAG}-linux-x86_64.tar.gz" \
+            -C target/release rf-gui
+          sha256sum "dist/rf-gui-${TAG}-linux-x86_64.tar.gz" \
+            > "dist/rf-gui-${TAG}-linux-x86_64.tar.gz.sha256"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
