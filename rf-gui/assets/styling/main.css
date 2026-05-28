@@ -505,6 +505,14 @@ a.rice-card {
     color: var(--text);
 }
 
+.empty-state p {
+    margin-bottom: 20px;
+}
+
+.empty-state .btn-primary {
+    display: inline-block;
+}
+
 /* Nav active link */
 .nav-link--active {
     color: var(--text);
