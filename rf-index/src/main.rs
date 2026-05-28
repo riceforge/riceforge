@@ -196,7 +196,7 @@ fn cmd_build(dir: &Path, output: &Path, base_url: Option<&str>) -> anyhow::Resul
                     })
                     .collect();
                 found.sort();
-                found.append(&mut screenshots);
+                found.append(&mut screenshots)
                 screenshots = found;
             }
         }
