@@ -48,6 +48,12 @@ input { font: inherit; outline: none; }
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
+    -webkit-app-region: drag;
+}
+
+.navbar a,
+.navbar button {
+    -webkit-app-region: no-drag;
 }
 
 .navbar-inner {
